@@ -1,0 +1,24 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      # GHSA-wrw7-89jp-8q8g (unsoundness in glib::VariantStrIter) needs glib >= 0.20, but glib
+      # arrives via tauri -> gtk -> atk and is pinned below that. Dependabot cannot resolve it and
+      # fails the run on every attempt. Ignored to stop a permanently red workflow, not because
+      # the advisory is dismissed: it stays listed under Security, and we call none of the
+      # affected API. Remove this once tauri moves to the gtk 0.20 stack.
+      - dependency-name: glib
+        versions: ["<0.20.0"]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
