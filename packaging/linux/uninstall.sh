@@ -14,4 +14,5 @@ rmdir /etc/blkbstr 2>/dev/null || true
 systemctl daemon-reload
 
 groupdel blkbstr 2>/dev/null || true
+rm -rf /var/lib/blkbstr
 echo "removed. logs remain in /var/log/blkbstr; per-user configs in ~/.config/blkbstr"

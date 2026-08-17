@@ -7,7 +7,7 @@ done in this repository.
 
 - [ ] Reachability check against a list of commonly blocked sites, with a per-site verdict — M2
 - [x] Locate the engine binary; refuse by name when missing — M1
-- [ ] Report the installed zapret2 version and where it came from — M1
+- [x] Report the installed zapret2 version — M1
 - [ ] Check for LuaJIT 2.1+ / Lua 5.3+ before anything else — M2
 - [ ] Engine installation per platform, with package-manager detection on Linux — M2 / M3
 - [ ] Linux distro and package-manager auto-detection, user-overridable — M2
@@ -50,11 +50,11 @@ done in this repository.
 - [x] nftables interception in a dedicated table; teardown is one atomic delete — M1
 - [x] Intercept only the ports the enabled strategies select — M1
 - [x] Notice an engine that exited by itself and surface the reason — M1
-- [ ] Restart the engine on crash rather than only reporting it — M1
+- [x] Restart a crashed engine with backoff; give up after a crash loop — M1
 - [x] Teardown on `Drop` and on next startup, not only on clean stop — M1
 - [x] Real `EngineStatus`: pid, started_at, engine version, last error — M1
-- [ ] Surface uptime and engine version in the GUI — M1
-- [ ] Start on boot with the last non-ephemeral config — M1
+- [x] Surface uptime, pid and engine version in the GUI — M1
+- [x] Start on boot with the last non-ephemeral config — M1
 - [ ] `winws2` backend for the same `Config` — M3
 - [ ] `dvtws2` backend for FreeBSD and OpenBSD — M5
 

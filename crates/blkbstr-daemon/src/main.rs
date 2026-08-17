@@ -6,6 +6,7 @@
 
 mod engine;
 mod firewall;
+mod supervisor;
 
 use anyhow::{Context, Result};
 use blkbstr_core::paths;
@@ -22,6 +23,10 @@ use std::sync::{Arc, Mutex};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// How often the monitor checks on the engine. A crash is noticed within this, which is far below
+/// what a user would perceive and far above what would make the poll itself cost anything.
+const MONITOR_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
+
 fn main() -> Result<()> {
     let args = Args::parse(std::env::args().skip(1));
     let _log_guard = init_logging();
@@ -32,6 +37,11 @@ fn main() -> Result<()> {
     // One engine, one lock. Every request that touches the network stack serialises through it,
     // which is what stops two clients from applying different configs at the same time.
     let engine = Arc::new(Mutex::new(open_engine()));
+
+    if let Ok(engine) = engine.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+        engine.restore();
+    }
+    spawn_monitor(Arc::clone(&engine));
 
     for conn in listener.incoming() {
         match conn {
@@ -49,6 +59,17 @@ fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Watches for an engine that exited by itself, and restarts it. Runs on a timer rather than
+/// blocking on the child, so the lock is held only for the instant the check takes.
+fn spawn_monitor(engine: Arc<Mutex<Result<Engine, String>>>) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(MONITOR_INTERVAL);
+        if let Ok(engine) = engine.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+            engine.tick();
+        }
+    });
 }
 
 /// A missing engine binary is reported per request rather than at startup: the daemon still has to
@@ -199,7 +220,7 @@ fn handle(request: Request, engine: &Mutex<Result<Engine, String>>) -> Response 
             daemon_version: VERSION.into(),
             protocol: PROTOCOL_VERSION,
         },
-        Request::Status => match guard.as_mut() {
+        Request::Status => match guard.as_ref() {
             Ok(engine) => Response::Status(engine.status()),
             // Without an engine nothing can be running, and the reason belongs in the status
             // rather than in an error the UI would render as a failed request.

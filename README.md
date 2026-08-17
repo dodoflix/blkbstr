@@ -60,9 +60,16 @@ Remove it with `sudo packaging/linux/uninstall.sh`.
 To run the daemon unprivileged while developing, point both halves somewhere writable:
 
 ```sh
-BLKBSTR_SOCKET=/tmp/blkbstrd.sock cargo run -p blkbstr-daemon
-BLKBSTR_SOCKET=/tmp/blkbstrd.sock npm run tauri dev
+export BLKBSTR_SOCKET=/tmp/blkbstr/d.sock
+export BLKBSTR_STATE_DIR=/tmp/blkbstr/state
+export BLKBSTR_RUNTIME_DIR=/tmp/blkbstr/run
+export BLKBSTR_LOG_DIR=/tmp/blkbstr/logs
+cargo run -p blkbstr-daemon
+npm run tauri dev
 ```
+
+Applying the rules still needs root, so an unprivileged daemon gets as far as `nft` and stops
+there.
 
 Windows and the BSDs have no service installer yet; see
 [docs/platform-notes.md](docs/platform-notes.md).

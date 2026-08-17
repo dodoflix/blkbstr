@@ -69,6 +69,30 @@ Teardown reverses it: rules first, then the process. The `Firewall` value also r
 `Drop`, and the daemon clears a stale table at startup, so the three ways of dying — clean stop,
 panic, SIGKILL — all end with the machine as it was.
 
+## Supervision
+
+A monitor thread checks on the engine every two seconds. When it finds one that exited by itself it
+removes the rules immediately — rules must not outlive the process reading the queue, not even for
+the seconds until a restart — and then asks `supervisor.rs` what to do.
+
+The policy is a sliding window: five restarts within sixty seconds, with backoff of 1s, 2s, 4s, 8s,
+15s, and then it gives up and leaves the engine down with the reason in `last_error`. Giving up is
+the point of having a policy at all. Each restart rewrites the nftables ruleset, so an engine dying
+instantly on a bad config would otherwise flap the user's network indefinitely. A deliberate start
+or stop resets the window, because the user is usually fixing exactly what crashed.
+
+An ephemeral run is never restarted: if an experiment dies, it has answered the question.
+
+## Surviving a reboot
+
+After a successful non-ephemeral start, the daemon writes the config to `state_dir()`
+(`/var/lib/blkbstr`). At startup it reads it back, re-validates it, and starts it. `stop` deletes
+it, because stopping is a decision to stay stopped.
+
+It is written only *after* the engine is up, so a config that cannot run is never the one the
+machine tries to bring up at boot. It is re-validated on the way back in for the same reason
+everything else is: that file decides what a root process runs.
+
 One connection per request. The daemon is a service that can restart underneath a running GUI, so
 a persistent connection would buy reconnect logic and nothing else.
 

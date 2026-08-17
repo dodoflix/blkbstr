@@ -6,69 +6,151 @@
 //! user's network, and they come out first on the way down.
 
 use crate::firewall::{self, Firewall, InterceptSpec};
+use crate::supervisor::{Decision, Supervisor};
 use anyhow::{bail, Context, Result};
 use blkbstr_core::config::{Config, Strategy};
+use blkbstr_core::paths;
 use blkbstr_core::protocol::EngineStatus;
 use blkbstr_core::registry::Platform;
 use blkbstr_core::render::{self, EngineOptions};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-/// Where the rendered parameter file and the engine's log are written.
-const RUNTIME_DIR: &str = "/run/blkbstr";
+/// What is running, and what to bring back if it dies.
+struct Active {
+    config: Config,
+    ephemeral: bool,
+    started_at: Option<u64>,
+    /// Set while waiting out a restart backoff; the engine is down until this passes.
+    restart_at: Option<Instant>,
+}
 
 pub struct Engine {
     platform: Platform,
     binary: PathBuf,
+    version: Option<String>,
     child: Option<Child>,
     firewall: Firewall,
-    status: EngineStatus,
-    /// Set when the engine was started with `ephemeral`, so a restart drops it.
-    ephemeral: bool,
+    active: Option<Active>,
+    supervisor: Supervisor,
+    last_error: Option<String>,
 }
 
 impl Engine {
     pub fn new(platform: Platform) -> Result<Self> {
         let binary = locate(platform.engine_binary())?;
-        tracing::info!(binary = %binary.display(), "found engine");
+        let version = read_version(&binary);
+        tracing::info!(binary = %binary.display(), version = ?version, "found engine");
         // Rules from a run that was killed rather than stopped outlive the process that made them.
         Firewall::clear_stale();
         Ok(Self {
             platform,
             binary,
+            version,
             child: None,
             firewall: Firewall::new(),
-            status: EngineStatus::default(),
-            ephemeral: false,
+            active: None,
+            supervisor: Supervisor::new(),
+            last_error: None,
         })
     }
 
-    pub fn status(&mut self) -> EngineStatus {
-        self.reap();
-        self.status.clone()
+    pub fn status(&self) -> EngineStatus {
+        EngineStatus {
+            running: self.child.is_some(),
+            active_config: self.active.as_ref().map(|a| a.config.name.clone()),
+            ephemeral: self.active.as_ref().is_some_and(|a| a.ephemeral),
+            pid: self.child.as_ref().map(Child::id),
+            started_at: self.active.as_ref().and_then(|a| a.started_at),
+            engine_version: self.version.clone(),
+            last_error: self.last_error.clone(),
+        }
     }
 
-    /// Notices an engine that exited on its own. Called before reporting status so the GUI does
-    /// not show "active" for a process that died ten minutes ago.
-    fn reap(&mut self) {
+    /// Brings back whatever was running before the machine went down. Failure is logged, never
+    /// fatal: a daemon that refuses to start because a saved config went stale is worse than one
+    /// that comes up idle and says why.
+    pub fn restore(&mut self) {
+        let Some(config) = load_saved() else {
+            return;
+        };
+        tracing::info!(config = %config.name, "restoring the config that was active at shutdown");
+        if let Err(e) = self.start(&config, false) {
+            tracing::error!(error = %format!("{e:#}"), "could not restore the saved config");
+            self.last_error = Some(format!("could not restore {}: {e:#}", config.name));
+        }
+    }
+
+    /// Drives supervision. Called on a timer rather than from a `waitpid` thread, because the
+    /// engine is a single child that restarts at most a few times a minute.
+    ///
+    /// ponytail: polling. Swap for SIGCHLD if the daemon ever supervises more than one process.
+    pub fn tick(&mut self) {
+        if let Some(at) = self.active.as_ref().and_then(|a| a.restart_at) {
+            if Instant::now() >= at {
+                self.restart();
+            }
+            return;
+        }
+
         let Some(child) = self.child.as_mut() else {
             return;
         };
-        match child.try_wait() {
-            Ok(Some(exit)) => {
-                tracing::error!(%exit, "engine exited on its own");
-                self.child = None;
-                self.status = EngineStatus {
-                    last_error: Some(format!("engine exited: {exit}")),
-                    ..EngineStatus::default()
-                };
-                if let Err(e) = self.firewall.teardown() {
-                    tracing::error!(error = %e, "could not remove rules after the engine died");
+        let exit = match child.try_wait() {
+            Ok(Some(exit)) => exit,
+            Ok(None) => return,
+            Err(e) => {
+                tracing::warn!(error = %e, "could not check on the engine");
+                return;
+            }
+        };
+
+        tracing::error!(%exit, "engine exited on its own");
+        self.child = None;
+        self.last_error = Some(format!("engine exited: {exit}"));
+
+        // Rules must not outlive the process reading the queue, not even for the seconds between
+        // a crash and a restart.
+        if let Err(e) = self.firewall.teardown() {
+            tracing::error!(error = %e, "could not remove rules after the engine died");
+        }
+
+        // An ephemeral run is an experiment; if it dies, it has answered the question.
+        if self.active.as_ref().is_some_and(|a| a.ephemeral) {
+            tracing::info!("ephemeral run died; not restarting it");
+            self.active = None;
+            return;
+        }
+
+        match self.supervisor.on_exit(Instant::now()) {
+            Decision::RestartAfter(delay) => {
+                tracing::warn!(?delay, "restarting the engine");
+                if let Some(active) = self.active.as_mut() {
+                    active.restart_at = Some(Instant::now() + delay);
                 }
             }
-            Ok(None) => {}
-            Err(e) => tracing::warn!(error = %e, "could not check on the engine"),
+            Decision::GiveUp { restarts, window } => {
+                tracing::error!(restarts, ?window, "engine keeps dying; leaving it down");
+                self.last_error = Some(format!(
+                    "engine exited {restarts} times in {}s and was left down; last exit: {exit}",
+                    window.as_secs()
+                ));
+                self.active = None;
+            }
+        }
+    }
+
+    fn restart(&mut self) {
+        let Some(active) = self.active.as_mut() else {
+            return;
+        };
+        active.restart_at = None;
+        let config = active.config.clone();
+        let ephemeral = active.ephemeral;
+        if let Err(e) = self.spawn(&config, ephemeral) {
+            tracing::error!(error = %format!("{e:#}"), "restart failed");
+            self.last_error = Some(format!("{e:#}"));
         }
     }
 
@@ -77,18 +159,32 @@ impl Engine {
         if self.child.is_some() {
             self.stop().context("restarting")?;
         }
+        // A deliberate start is a fresh slate: the user may well be fixing what crashed.
+        self.supervisor.reset();
+        self.spawn(config, ephemeral)?;
 
-        std::fs::create_dir_all(RUNTIME_DIR).with_context(|| format!("creating {RUNTIME_DIR}"))?;
+        // Persisted only after a successful start, so a config that cannot run is never the one
+        // the machine tries to bring up at boot. Ephemeral runs are never persisted: not
+        // surviving a restart is the whole point of them.
+        if !ephemeral {
+            if let Err(e) = save_active(config) {
+                tracing::warn!(error = %e, "could not save the active config; it will not return on boot");
+            }
+        }
+        Ok(())
+    }
 
-        let params_path = format!("{RUNTIME_DIR}/nfqws2.conf");
+    fn spawn(&mut self, config: &Config, ephemeral: bool) -> Result<()> {
+        let runtime = paths::runtime_dir();
+        std::fs::create_dir_all(&runtime)
+            .with_context(|| format!("creating {}", runtime.display()))?;
+
+        let params_path = runtime.join("nfqws2.conf").display().to_string();
         let options = EngineOptions {
             platform: self.platform,
             queue_num: 200,
-            pidfile: format!("{RUNTIME_DIR}/engine.pid"),
-            debug_log: Some(format!(
-                "{}/engine.log",
-                blkbstr_core::paths::log_dir().display()
-            )),
+            pidfile: runtime.join("engine.pid").display().to_string(),
+            debug_log: Some(format!("{}/engine.log", paths::log_dir().display())),
         };
         std::fs::write(&params_path, render::parameter_file(config, &options))
             .with_context(|| format!("writing {params_path}"))?;
@@ -109,16 +205,13 @@ impl Engine {
 
         let pid = child.id();
         self.child = Some(child);
-        self.ephemeral = ephemeral;
-        self.status = EngineStatus {
-            running: true,
-            active_config: Some(config.name.clone()),
+        self.last_error = None;
+        self.active = Some(Active {
+            config: config.clone(),
             ephemeral,
-            pid: Some(pid),
             started_at: now(),
-            engine_version: self.version(),
-            last_error: None,
-        };
+            restart_at: None,
+        });
         tracing::info!(config = %config.name, pid, ephemeral, "engine started");
         Ok(())
     }
@@ -139,12 +232,6 @@ impl Engine {
         Ok(())
     }
 
-    fn version(&self) -> Option<String> {
-        let out = Command::new(&self.binary).arg("--version").output().ok()?;
-        let text = String::from_utf8_lossy(&out.stdout);
-        text.lines().next().map(|l| l.trim().to_owned())
-    }
-
     pub fn stop(&mut self) -> Result<()> {
         // Rules first: with them gone, traffic flows normally even if killing the engine drags.
         let rules = self.firewall.teardown();
@@ -154,10 +241,53 @@ impl Engine {
             let _ = child.wait();
             tracing::info!("engine stopped");
         }
-        self.status = EngineStatus::default();
-        self.ephemeral = false;
+        self.active = None;
+        self.last_error = None;
+        self.supervisor.reset();
+        // Stopping is a decision to stay stopped, including across a reboot.
+        if let Err(e) = clear_saved() {
+            tracing::warn!(error = %e, "could not clear the saved config");
+        }
         rules
     }
+}
+
+fn saved_path() -> PathBuf {
+    paths::state_dir().join("active.json")
+}
+
+fn save_active(config: &Config) -> Result<()> {
+    let dir = paths::state_dir();
+    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    std::fs::write(saved_path(), config.to_json()?).context("writing the active config")
+}
+
+fn clear_saved() -> Result<()> {
+    match std::fs::remove_file(saved_path()) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// `None` when there is nothing to restore, or when what is there is unusable. Re-validated on the
+/// way in because this file decides what a root process runs.
+fn load_saved() -> Option<Config> {
+    let path = saved_path();
+    let text = std::fs::read_to_string(&path).ok()?;
+    match parse_saved(&text) {
+        Ok(config) => Some(config),
+        Err(e) => {
+            tracing::error!(path = %path.display(), error = %e, "ignoring an unusable saved config");
+            None
+        }
+    }
+}
+
+fn parse_saved(text: &str) -> Result<Config, String> {
+    let config = Config::from_json(text).map_err(|e| e.to_string())?;
+    config.validate().map_err(|e| e.to_string())?;
+    Ok(config)
 }
 
 /// Ports the config actually cares about decide what gets queued. Intercepting more than the
@@ -226,6 +356,15 @@ fn locate(binary: &str) -> Result<PathBuf> {
              the binary in /opt/zapret2"
         ),
     }
+}
+
+fn read_version(binary: &Path) -> Option<String> {
+    let out = Command::new(binary).arg("--version").output().ok()?;
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .next()
+        .map(|l| l.trim().to_owned())
+        .filter(|l| !l.is_empty())
 }
 
 fn now() -> Option<u64> {
@@ -302,5 +441,20 @@ mod tests {
     fn missing_engine_binary_names_itself() {
         let e = locate("nfqws2-definitely-not-installed").unwrap_err();
         assert!(e.to_string().contains("nfqws2-definitely-not-installed"));
+    }
+
+    #[test]
+    fn a_saved_config_is_revalidated_on_the_way_back_in() {
+        let good = render::starter_config("saved");
+        assert_eq!(parse_saved(&good.to_json().unwrap()).unwrap().name, "saved");
+
+        // Anything that would be refused from the socket is refused from disk too — the file is
+        // root-owned, but a bug that writes a bad one must not become a bug that runs it.
+        assert!(parse_saved(r#"{"name":"../escape"}"#).is_err());
+        assert!(parse_saved("not json").is_err());
+        assert!(parse_saved(
+            r#"{"name":"x","strategies":[{"name":"s","filter":{"tcp":"443\n--qnum=9"}}]}"#
+        )
+        .is_err());
     }
 }

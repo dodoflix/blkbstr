@@ -47,9 +47,40 @@ pub fn backups_dir() -> Option<PathBuf> {
     config_dir().map(|d| d.join("backups"))
 }
 
+/// Daemon state that has to outlive a reboot — currently the config to bring back up on boot.
+/// Root-owned: it decides what runs as root, so it is not writable by the GUI's user.
+///
+/// `BLKBSTR_STATE_DIR` overrides it, for running the daemon unprivileged during development.
+pub fn state_dir() -> PathBuf {
+    if let Ok(custom) = std::env::var("BLKBSTR_STATE_DIR") {
+        return PathBuf::from(custom);
+    }
+    if cfg!(windows) {
+        PathBuf::from(r"C:\ProgramData\blkbstr\state")
+    } else {
+        PathBuf::from("/var/lib/blkbstr")
+    }
+}
+
+/// Runtime scratch — the rendered parameter file and the engine pidfile. Cleared by the OS on
+/// reboot, unlike [`state_dir`]. `BLKBSTR_RUNTIME_DIR` overrides it for development.
+pub fn runtime_dir() -> PathBuf {
+    if let Ok(custom) = std::env::var("BLKBSTR_RUNTIME_DIR") {
+        return PathBuf::from(custom);
+    }
+    if cfg!(windows) {
+        PathBuf::from(r"C:\ProgramData\blkbstr\run")
+    } else {
+        PathBuf::from("/run/blkbstr")
+    }
+}
+
 /// Where the daemon writes rotating logs. System-wide: the daemon is a service, not a user
 /// process, and the GUI tails these files read-only.
 pub fn log_dir() -> PathBuf {
+    if let Ok(custom) = std::env::var("BLKBSTR_LOG_DIR") {
+        return PathBuf::from(custom);
+    }
     if cfg!(windows) {
         PathBuf::from(r"C:\ProgramData\blkbstr\logs")
     } else {

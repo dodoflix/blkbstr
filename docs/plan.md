@@ -67,8 +67,9 @@ The first release that does the thing.
 - [x] Locate the engine binary; refuse clearly, by name, when it is missing.
 - [x] Supervise the process; notice an engine that exits by itself and pull the rules with it.
 - [x] Tear rules down on stop, on `Drop`, and on startup after a kill that skipped both.
-- [ ] Real uptime and engine version surfaced in the GUI, not just carried in the status.
-- [ ] Start on boot with the last non-ephemeral config.
+- [x] Restart a crashed engine, with backoff, and give up rather than thrash the firewall.
+- [x] Start on boot with the last non-ephemeral config.
+- [x] Uptime, pid and engine version in the GUI.
 - [ ] Log viewer: tail the engine and daemon logs in the GUI, with filter and one-click export.
 - [ ] AppArmor and SELinux profiles, so hardened distros fail loudly instead of silently.
 
