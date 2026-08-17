@@ -16,8 +16,8 @@ npm run tauri dev
 
 ## Checks
 
-CI runs these on Linux, Windows and macOS — macOS is not a target platform, it is there to keep
-the portable crates honest. Run them before pushing:
+CI runs these on Linux and Windows, the two platforms with hosted runners that we target. Run them
+before pushing:
 
 ```sh
 cargo fmt --all -- --check

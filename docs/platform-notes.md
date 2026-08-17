@@ -61,8 +61,8 @@ The manual gives the reason: Apple removed `ipdivert` from the kernel and there 
 packet-interception facility. Supporting macOS would mean writing a Network Extension *and* a
 packet manipulator that upstream does not have — a different project, not a milestone of this one.
 
-macOS stays in CI as a build target, because compiling the portable crates there catches
-platform-dependent mistakes cheaply. `Platform::current()` returns `None` on it.
+`Platform::current()` returns `None` there, and macOS is not built in CI — a green build for a
+platform we cannot ship is minutes spent proving nothing.
 
 ## Distribution
 
