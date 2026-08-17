@@ -25,11 +25,18 @@ cargo test --workspace
 npm run build
 ```
 
-CI splits them into two jobs. `core` covers the portable crates and the frontend and needs no
-system packages, so it reports quickly and is where the tests live. `app` builds the GUI crate on
-Linux and Windows, and needs the platform webview — on Linux that means an `apt` step which has
-been the slowest and least reliable part of the run, which is why it is not in the way of the
-tests.
+CI splits them into three jobs, so a slow package mirror cannot delay news of a broken commit:
+
+| Job | Covers | Needs system packages |
+| --- | --- | --- |
+| `rust` | `blkbstr-core`, `blkbstr-daemon`, on Linux **and** Windows | no |
+| `frontend` | `npm run build` | no |
+| `app` | `blkbstr` (the Tauri crate), on Linux and Windows | yes — the platform webview |
+
+`rust` runs on both platforms rather than just Linux because `blkbstr-daemon` has
+`#[cfg(unix)]` / `#[cfg(not(unix))]` branches for the socket; the Windows named-pipe path is
+compiled only by the Windows leg. Adding a platform-specific branch without a matching CI leg is
+how it goes stale.
 
 ## What the code should look like
 

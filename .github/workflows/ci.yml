@@ -19,11 +19,17 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Everything that does not need the system webview. This is where all the tests live, so it is
-  # the job that actually tells us whether the code works — kept free of `apt` so a slow package
-  # mirror cannot stop it reporting.
-  core:
-    runs-on: ubuntu-latest
+  # The portable crates. No system packages, so this reports quickly whatever the package mirrors
+  # are doing — and it holds every test.
+  #
+  # Both platforms, because `blkbstr-daemon` has `#[cfg(unix)]` / `#[cfg(not(unix))]` branches for
+  # the socket: the Windows named-pipe path is only compiled by the Windows leg.
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
@@ -31,19 +37,25 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: npm
 
       - run: cargo fmt --all -- --check
       - run: cargo clippy -p blkbstr-core -p blkbstr-daemon --all-targets -- -D warnings
       - run: cargo test -p blkbstr-core -p blkbstr-daemon
 
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
       - run: npm ci
       - run: npm run build
 
-  # The GUI crate links against the platform webview, so this one needs system packages on Linux.
+  # The GUI crate links against the platform webview, so this is the only job needing system
+  # packages, and the only one that covers `-p blkbstr`.
   app:
     strategy:
       fail-fast: false
@@ -83,7 +95,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # The GUI crate needs a frontend build to embed.
+      # tauri embeds the built frontend, so it has to exist before the crate is compiled.
       - run: npm run build
 
       - run: cargo clippy -p blkbstr --all-targets -- -D warnings
