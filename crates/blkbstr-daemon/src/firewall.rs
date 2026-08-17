@@ -105,9 +105,12 @@ pub fn ruleset(spec: &InterceptSpec) -> String {
             "add rule inet {TABLE} pre iifname \"{wan}\" tcp sport {{ {tcp} }} \
              ct reply packets 1-{inp} queue num {q} bypass\n"
         ));
+        // Unquoted: the quotes in upstream's example are shell quoting. `nft -f -` reads this
+        // directly, and a quoted expression is parsed as a literal string, failing on the next
+        // token with "syntax error, unexpected queue".
         s.push_str(&format!(
             "add rule inet {TABLE} pre iifname \"{wan}\" tcp sport {{ {tcp} }} \
-             \"tcp flags & (syn | ack) == (syn | ack)\" queue num {q} bypass\n"
+             tcp flags & (syn | ack) == (syn | ack) queue num {q} bypass\n"
         ));
         s.push_str(&format!(
             "add rule inet {TABLE} pre iifname \"{wan}\" tcp sport {{ {tcp} }} \
@@ -283,6 +286,20 @@ mod tests {
         let queueing = s.lines().filter(|l| l.contains("queue num")).count();
         assert_eq!(queueing, 7);
         assert_eq!(s.matches("queue num 137 bypass").count(), 7);
+    }
+
+    #[test]
+    fn match_expressions_are_not_quoted() {
+        // Only interface names are quoted. A quoted match expression is read by nft as a literal.
+        let s = ruleset(&InterceptSpec::new("eth0", 200));
+        for line in s.lines() {
+            let quoted: Vec<_> = line.match_indices('"').collect();
+            assert!(
+                quoted.len() % 2 == 0 && quoted.len() <= 2,
+                "only the interface name may be quoted: {line}"
+            );
+        }
+        assert!(s.contains("tcp flags & (syn | ack) == (syn | ack) queue num 200 bypass"));
     }
 
     #[test]

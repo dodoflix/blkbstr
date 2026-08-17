@@ -14,6 +14,15 @@ import {
 } from "@radix-ui/themes";
 import * as api from "./api";
 
+/** Coarse on purpose: "3h" is what a user wants from an uptime, not "3h 07m 41s". */
+function uptime(since: number): string {
+  const seconds = Math.max(0, Math.floor(Date.now() / 1000) - since);
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
+}
+
 export default function App() {
   return (
     <Container size="2" p="5">
@@ -65,6 +74,9 @@ function StatusPanel() {
 
   useEffect(() => {
     void refresh();
+    // The daemon does not push, and uptime is a lie the moment it stops being re-read.
+    const timer = setInterval(() => void refresh(), 5000);
+    return () => clearInterval(timer);
   }, [refresh]);
 
   const act = async (fn: () => Promise<void>) => {
@@ -117,13 +129,33 @@ function StatusPanel() {
           <DataList.Item>
             <DataList.Label>Engine</DataList.Label>
             <DataList.Value>
-              {status?.running ? (
-                <Badge color="jade">active</Badge>
-              ) : (
-                <Badge color="gray">stopped</Badge>
-              )}
+              <Flex align="center" gap="2">
+                {status?.running ? (
+                  <Badge color="jade">active</Badge>
+                ) : (
+                  <Badge color="gray">stopped</Badge>
+                )}
+                {status?.running && status.started_at && (
+                  <Text size="2" color="gray">
+                    up {uptime(status.started_at)}
+                  </Text>
+                )}
+                {status?.pid && (
+                  <Text size="1" color="gray">
+                    pid {status.pid}
+                  </Text>
+                )}
+              </Flex>
             </DataList.Value>
           </DataList.Item>
+          {status?.engine_version && (
+            <DataList.Item>
+              <DataList.Label>Version</DataList.Label>
+              <DataList.Value>
+                <Code size="2">{status.engine_version}</Code>
+              </DataList.Value>
+            </DataList.Item>
+          )}
           {status?.last_error && (
             <DataList.Item>
               <DataList.Label>Last error</DataList.Label>

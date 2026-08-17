@@ -15,6 +15,9 @@ RestartSec=2
 RuntimeDirectory=blkbstr
 RuntimeDirectoryMode=0755
 LogsDirectory=blkbstr
+# Holds the config to bring back up on boot; must survive a reboot, unlike RuntimeDirectory.
+StateDirectory=blkbstr
+StateDirectoryMode=0700
 
 # The daemon manipulates the firewall and packet queues; it needs those capabilities and nothing
 # else. Drop the rest so a compromised helper is not a general-purpose root shell.
@@ -24,7 +27,7 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/var/log/blkbstr /run/blkbstr
+ReadWritePaths=/var/log/blkbstr /run/blkbstr /var/lib/blkbstr
 RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6 AF_PACKET
 RestrictNamespaces=yes
 LockPersonality=yes
