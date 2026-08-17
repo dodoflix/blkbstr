@@ -1,0 +1,133 @@
+mod configs;
+mod daemon;
+
+use blkbstr_core::protocol::{EngineStatus, Request, Response, PROTOCOL_VERSION};
+use blkbstr_core::registry::{self, Warning};
+use blkbstr_core::Config;
+use serde::Serialize;
+
+#[derive(Serialize)]
+pub struct DaemonInfo {
+    reachable: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<String>,
+    /// Set when the daemon answered but speaks a different protocol, or did not answer at all.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    problem: Option<String>,
+}
+
+/// Never fails: "the daemon is not installed" is the normal first-run state, not an error the UI
+/// should render as a crash.
+#[tauri::command]
+fn daemon_info() -> DaemonInfo {
+    match daemon::request(Request::Ping {
+        protocol: PROTOCOL_VERSION,
+    }) {
+        Ok(Response::Pong { daemon_version, .. }) => DaemonInfo {
+            reachable: true,
+            version: Some(daemon_version),
+            problem: None,
+        },
+        Ok(other) => DaemonInfo {
+            reachable: false,
+            version: None,
+            problem: Some(format!("unexpected reply to ping: {other:?}")),
+        },
+        Err(e) => DaemonInfo {
+            reachable: false,
+            version: None,
+            problem: Some(e.to_string()),
+        },
+    }
+}
+
+#[tauri::command]
+fn engine_status() -> Result<EngineStatus, daemon::Error> {
+    match daemon::request(Request::Status)? {
+        Response::Status(status) => Ok(status),
+        other => Err(daemon::Error::Io(format!(
+            "unexpected reply to status: {other:?}"
+        ))),
+    }
+}
+
+#[tauri::command]
+fn engine_start(config: Config, ephemeral: bool) -> Result<(), daemon::Error> {
+    daemon::request(Request::Start {
+        config: Box::new(config),
+        ephemeral,
+    })
+    .map(|_| ())
+}
+
+#[tauri::command]
+fn engine_stop() -> Result<(), daemon::Error> {
+    daemon::request(Request::Stop).map(|_| ())
+}
+
+/// What in this config will not do what it looks like it does. Pure and local — the daemon is not
+/// consulted, so the UI can lint while the user types.
+#[tauri::command]
+fn lint_config(config: Config) -> Vec<Warning> {
+    registry::lint(&config)
+}
+
+/// The Lua functions this build can offer in a strategy editor, newest-known upstream surface.
+#[tauri::command]
+fn known_functions() -> Vec<&'static str> {
+    registry::FUNCTIONS.iter().map(|f| f.name).collect()
+}
+
+/// A working config to start from, used by the first-run wizard.
+#[tauri::command]
+fn starter_config(name: String) -> Config {
+    blkbstr_core::render::starter_config(&name)
+}
+
+/// Exactly what the daemon will hand the engine. Lets the UI show the real parameter file instead
+/// of asking the user to trust that the config means what they think.
+#[tauri::command]
+fn preview_config(config: Config) -> Result<String, String> {
+    let platform =
+        blkbstr_core::Platform::current().ok_or("this platform has no zapret2 engine")?;
+    Ok(blkbstr_core::render::parameter_file(
+        &config,
+        &blkbstr_core::render::EngineOptions::new(platform),
+    ))
+}
+
+#[tauri::command]
+fn list_configs() -> Result<Vec<String>, String> {
+    configs::list()
+}
+
+#[tauri::command]
+fn load_config(name: String) -> Result<Config, String> {
+    configs::load(&name)
+}
+
+#[tauri::command]
+fn save_config(config: Config) -> Result<(), String> {
+    configs::save(&config)
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![
+            daemon_info,
+            engine_status,
+            engine_start,
+            engine_stop,
+            lint_config,
+            known_functions,
+            starter_config,
+            preview_config,
+            list_configs,
+            load_config,
+            save_config,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
