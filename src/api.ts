@@ -71,6 +71,15 @@ export const previewConfig = (config: Config) =>
 /** Lua function names this build knows, for a strategy editor. */
 export const knownFunctions = () => invoke<string[]>("known_functions");
 
+export type LogFile = { name: string; size: number; modified?: number };
+
+export const listLogs = () => invoke<LogFile[]>("list_logs");
+export const readLog = (name: string) => invoke<string>("read_log", { name });
+
+/** Writes a diagnostics file locally and returns its path. Nothing is uploaded. */
+export const exportDiagnostics = (logsWanted: string[]) =>
+  invoke<string>("export_diagnostics", { logsWanted });
+
 /** Resolves even when the daemon is absent — check `reachable`. */
 export const daemonInfo = () => invoke<DaemonInfo>("daemon_info");
 

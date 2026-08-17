@@ -104,7 +104,13 @@ rather than streaming over the socket — a log stream would mean framing, backp
 subscription state on the privileged side, in exchange for reading a file the user can already
 read.
 
-Filtering is `BLKBSTR_LOG` (`tracing-subscriber` env-filter syntax), defaulting to `info`.
+Filtering the daemon's own output is `BLKBSTR_LOG` (`tracing-subscriber` env-filter syntax),
+defaulting to `info`.
+
+The GUI's Logs tab lists the files, re-reads the last 256 KB of the selected one every two seconds
+while "Follow" is on, and filters lines client-side. Export writes a single file — status plus
+every log — into the user's config directory and reveals it. It is never uploaded: engine logs name
+the hosts they saw, so the user reads it before deciding to send it anywhere.
 
 ## Frontend
 

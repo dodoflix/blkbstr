@@ -4,14 +4,19 @@ import {
   Button,
   Callout,
   Card,
+  Checkbox,
   Code,
   Container,
   DataList,
   Flex,
   Heading,
+  ScrollArea,
+  Select,
   Tabs,
   Text,
+  TextField,
 } from "@radix-ui/themes";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import * as api from "./api";
 
 /** Coarse on purpose: "3h" is what a user wants from an uptime, not "3h 07m 41s". */
@@ -25,7 +30,7 @@ function uptime(since: number): string {
 
 export default function App() {
   return (
-    <Container size="2" p="5">
+    <Container size="3" p="5">
       <Flex direction="column" gap="4">
         <Flex align="baseline" gap="3">
           <Heading size="7">Blockbuster</Heading>
@@ -38,6 +43,7 @@ export default function App() {
           <Tabs.List>
             <Tabs.Trigger value="status">Status</Tabs.Trigger>
             <Tabs.Trigger value="configs">Configs</Tabs.Trigger>
+            <Tabs.Trigger value="logs">Logs</Tabs.Trigger>
           </Tabs.List>
 
           <Tabs.Content value="status" mt="4">
@@ -45,6 +51,9 @@ export default function App() {
           </Tabs.Content>
           <Tabs.Content value="configs" mt="4">
             <ConfigsPanel />
+          </Tabs.Content>
+          <Tabs.Content value="logs" mt="4">
+            <LogsPanel />
           </Tabs.Content>
         </Tabs.Root>
       </Flex>
@@ -238,5 +247,137 @@ function ConfigsPanel() {
         </Flex>
       )}
     </Card>
+  );
+}
+
+function LogsPanel() {
+  const [files, setFiles] = useState<api.LogFile[]>([]);
+  const [selected, setSelected] = useState<string>();
+  const [text, setText] = useState("");
+  const [filter, setFilter] = useState("");
+  const [follow, setFollow] = useState(true);
+  const [error, setError] = useState<string>();
+  const [exported, setExported] = useState<string>();
+
+  useEffect(() => {
+    api.listLogs().then((found) => {
+      setFiles(found);
+      setSelected((current) => current ?? found[0]?.name);
+    }, (e) => setError(String(e)));
+  }, []);
+
+  useEffect(() => {
+    if (!selected) return;
+    const load = () =>
+      api.readLog(selected).then(setText, (e) => setError(String(e)));
+    void load();
+    if (!follow) return;
+    const timer = setInterval(load, 2000);
+    return () => clearInterval(timer);
+  }, [selected, follow]);
+
+  // Plain substring, case-insensitive. A regex box invites a bad regex hanging the webview on a
+  // 256 KB string, and "what happened around nfqws2" is what people actually type.
+  const needle = filter.toLowerCase();
+  const lines = text
+    .split("\n")
+    .filter((l) => !needle || l.toLowerCase().includes(needle));
+
+  if (files.length === 0 && !error) {
+    return (
+      <Card>
+        <Text color="gray">
+          No logs yet. The service writes them once it has run.
+        </Text>
+      </Card>
+    );
+  }
+
+  return (
+    <Flex direction="column" gap="3">
+      {error && (
+        <Callout.Root color="red">
+          <Callout.Text>{error}</Callout.Text>
+        </Callout.Root>
+      )}
+
+      <Flex gap="2" align="center" wrap="wrap">
+        <Select.Root value={selected} onValueChange={setSelected}>
+          <Select.Trigger placeholder="Pick a log" />
+          <Select.Content>
+            {files.map((f) => (
+              <Select.Item key={f.name} value={f.name}>
+                {f.name}
+              </Select.Item>
+            ))}
+          </Select.Content>
+        </Select.Root>
+
+        <TextField.Root
+          placeholder="Filter lines…"
+          value={filter}
+          onChange={(e) => setFilter(e.currentTarget.value)}
+          style={{ flex: 1, minWidth: 180 }}
+        />
+
+        <Text as="label" size="2">
+          <Flex gap="2" align="center">
+            <Checkbox
+              checked={follow}
+              onCheckedChange={(v) => setFollow(v === true)}
+            />
+            Follow
+          </Flex>
+        </Text>
+
+        <Button
+          variant="soft"
+          onClick={() =>
+            void api
+              .exportDiagnostics(files.map((f) => f.name))
+              .then(setExported, (e) => setError(String(e)))
+          }
+        >
+          Export
+        </Button>
+      </Flex>
+
+      {exported && (
+        <Callout.Root color="jade">
+          <Callout.Text>
+            Written to <Code>{exported}</Code>. Read it before sending it
+            anywhere — engine logs name the sites they saw.{" "}
+            <Button
+              size="1"
+              variant="ghost"
+              onClick={() => void revealItemInDir(exported)}
+            >
+              Show file
+            </Button>
+          </Callout.Text>
+        </Callout.Root>
+      )}
+
+      <Card>
+        <ScrollArea style={{ height: 420 }}>
+          <pre
+            style={{
+              margin: 0,
+              fontSize: "var(--font-size-1)",
+              lineHeight: 1.5,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {lines.join("\n") || "(nothing matches)"}
+          </pre>
+        </ScrollArea>
+      </Card>
+
+      <Text size="1" color="gray">
+        {lines.length} line{lines.length === 1 ? "" : "s"}
+        {needle && ` matching "${filter}"`}
+      </Text>
+    </Flex>
   );
 }

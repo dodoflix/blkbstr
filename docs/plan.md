@@ -70,7 +70,7 @@ The first release that does the thing.
 - [x] Restart a crashed engine, with backoff, and give up rather than thrash the firewall.
 - [x] Start on boot with the last non-ephemeral config.
 - [x] Uptime, pid and engine version in the GUI.
-- [ ] Log viewer: tail the engine and daemon logs in the GUI, with filter and one-click export.
+- [x] Log viewer: tail the engine and daemon logs in the GUI, with filter and one-click export.
 - [ ] AppArmor and SELinux profiles, so hardened distros fail loudly instead of silently.
 
 **Done when:** a Linux user installs, picks a config, and blocked sites load; rebooting keeps it

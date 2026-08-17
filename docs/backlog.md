@@ -61,9 +61,9 @@ done in this repository.
 ## Logging & diagnostics
 
 - [x] Rolling daily log files, plus stderr for the service manager — M0
-- [ ] Log viewer in the GUI, tailing the file live — M1
-- [ ] Filter and search within logs — M1
-- [ ] One-click diagnostic export for bug reports — M1
+- [x] Log viewer in the GUI, tailing the file live — M1
+- [x] Filter within logs — M1
+- [x] One-click diagnostic export for bug reports — M1
 
 ## Auto-update
 
