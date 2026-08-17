@@ -4,6 +4,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      # One PR for the routine bumps. Majors stay separate: those want reading, not rubber-stamping.
+      cargo-minor:
+        patterns: ["*"]
+        update-types: [minor, patch]
     ignore:
       # GHSA-wrw7-89jp-8q8g (unsoundness in glib::VariantStrIter) needs glib >= 0.20, but glib
       # arrives via tauri -> gtk -> atk and is pinned below that. Dependabot cannot resolve it and
@@ -17,8 +22,21 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      # These have peer-dependency ranges on each other, so a PR that moves one without the other
+      # fails `npm ci` with ERESOLVE before any code runs. @vitejs/plugin-react 6 requires
+      # vite ^8; bumped separately, they can never both be satisfied.
+      vite:
+        patterns: ["vite", "@vitejs/*"]
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+      tauri:
+        patterns: ["@tauri-apps/*"]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
