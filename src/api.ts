@@ -71,6 +71,20 @@ export const previewConfig = (config: Config) =>
 /** Lua function names this build knows, for a strategy editor. */
 export const knownFunctions = () => invoke<string[]>("known_functions");
 
+export type ServiceStatus = {
+  installed: boolean;
+  enabled: boolean;
+  active: boolean;
+  unsupported?: string;
+};
+
+export const serviceStatus = () => invoke<ServiceStatus>("service_status");
+/** Both prompt via polkit. */
+export const serviceSetEnabled = (enabled: boolean) =>
+  invoke<void>("service_set_enabled", { enabled });
+export const serviceSetActive = (active: boolean) =>
+  invoke<void>("service_set_active", { active });
+
 export type LogFile = { name: string; size: number; modified?: number };
 
 export const listLogs = () => invoke<LogFile[]>("list_logs");

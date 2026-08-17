@@ -41,7 +41,7 @@ done in this repository.
 - [ ] Windows Service, installed by one UAC-elevated step — M3
 - [ ] Windows named-pipe ACL restricted to the installing user's group — M3 *(release blocker)*
 - [ ] BSD rc.d service script — M5
-- [ ] Service control from the GUI: enable/disable at boot, start/stop now — M1
+- [x] Service control from the GUI: enable/disable at boot, start/stop now — M1
 
 ## Engine
 

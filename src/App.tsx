@@ -64,11 +64,13 @@ export default function App() {
 function StatusPanel() {
   const [daemon, setDaemon] = useState<api.DaemonInfo>();
   const [status, setStatus] = useState<api.EngineStatus>();
+  const [svc, setSvc] = useState<api.ServiceStatus>();
   const [error, setError] = useState<string>();
 
   const refresh = useCallback(async () => {
     const info = await api.daemonInfo();
     setDaemon(info);
+    api.serviceStatus().then(setSvc, () => setSvc(undefined));
     if (!info.reachable) {
       setStatus(undefined);
       return;
@@ -128,11 +130,18 @@ function StatusPanel() {
           <DataList.Item>
             <DataList.Label>Service</DataList.Label>
             <DataList.Value>
-              {daemon?.reachable ? (
-                <Badge color="jade">running · v{daemon.version}</Badge>
-              ) : (
-                <Badge color="gray">not reachable</Badge>
-              )}
+              <Flex align="center" gap="2" wrap="wrap">
+                {daemon?.reachable ? (
+                  <Badge color="jade">running · v{daemon.version}</Badge>
+                ) : (
+                  <Badge color="gray">not reachable</Badge>
+                )}
+                {svc?.installed && (
+                  <Badge color={svc.enabled ? "jade" : "gray"} variant="soft">
+                    {svc.enabled ? "starts at boot" : "manual start"}
+                  </Badge>
+                )}
+              </Flex>
             </DataList.Value>
           </DataList.Item>
           <DataList.Item>
@@ -190,6 +199,30 @@ function StatusPanel() {
           )}
         </DataList.Root>
       </Card>
+
+      {svc?.installed && (
+        <Flex gap="2" align="center" wrap="wrap">
+          <Button
+            variant="soft"
+            onClick={() =>
+              void act(() => api.serviceSetActive(!svc.active))
+            }
+          >
+            {svc.active ? "Stop service" : "Start service"}
+          </Button>
+          <Button
+            variant="soft"
+            onClick={() =>
+              void act(() => api.serviceSetEnabled(!svc.enabled))
+            }
+          >
+            {svc.enabled ? "Don't start at boot" : "Start at boot"}
+          </Button>
+          <Text size="1" color="gray">
+            Both ask for authentication.
+          </Text>
+        </Flex>
+      )}
 
       <Flex gap="2">
         <Button onClick={() => void refresh()} variant="soft">

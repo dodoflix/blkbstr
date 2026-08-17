@@ -74,6 +74,17 @@ there.
 Windows and the BSDs have no service installer yet; see
 [docs/platform-notes.md](docs/platform-notes.md).
 
+## Troubleshooting
+
+**The window does not open, and the log says
+`Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display.`** — WebKitGTK's DMA-BUF
+renderer fails on the NVIDIA proprietary driver under Wayland. The app already sets
+`WEBKIT_DISABLE_DMABUF_RENDERER=1` for itself on Linux; if you have exported that variable as `0`
+in your shell, that override wins and this is why.
+
+**The GUI says the service is not reachable right after installing.** Group membership only applies
+to new sessions. Log out and back in, or check with `id -nG | grep blkbstr`.
+
 ## Privacy
 
 No telemetry, of any kind. Nothing leaves the machine unless you turn on config sync, which

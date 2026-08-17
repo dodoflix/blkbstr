@@ -1,6 +1,7 @@
 mod configs;
 mod daemon;
 mod logs;
+mod service;
 
 use blkbstr_core::protocol::{EngineStatus, Request, Response, PROTOCOL_VERSION};
 use blkbstr_core::registry::{self, Warning};
@@ -136,8 +137,43 @@ fn save_config(config: Config) -> Result<(), String> {
     configs::save(&config)
 }
 
+/// WebKitGTK's DMA-BUF renderer fails on the NVIDIA proprietary driver under Wayland, killing the
+/// process at startup with:
+///
+/// ```text
+/// Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display.
+/// ```
+///
+/// Disabling it costs nothing here — this is a settings UI, not a compositor — and a slower
+/// renderer beats a window that never opens. Left alone if the user set it themselves.
+#[cfg(target_os = "linux")]
+fn work_around_webkit_dmabuf() {
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+}
+
+#[tauri::command]
+fn service_status() -> service::ServiceStatus {
+    service::status()
+}
+
+/// Both prompt via polkit; they fail rather than hang when no polkit agent is running.
+#[tauri::command]
+fn service_set_enabled(enabled: bool) -> Result<(), String> {
+    service::set_enabled(enabled)
+}
+
+#[tauri::command]
+fn service_set_active(active: bool) -> Result<(), String> {
+    service::set_active(active)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    work_around_webkit_dmabuf();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -149,6 +185,9 @@ pub fn run() {
             known_functions,
             starter_config,
             preview_config,
+            service_status,
+            service_set_enabled,
+            service_set_active,
             list_logs,
             read_log,
             export_diagnostics,
