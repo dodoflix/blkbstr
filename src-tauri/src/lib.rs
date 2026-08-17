@@ -1,5 +1,6 @@
 mod configs;
 mod daemon;
+mod logs;
 
 use blkbstr_core::protocol::{EngineStatus, Request, Response, PROTOCOL_VERSION};
 use blkbstr_core::registry::{self, Warning};
@@ -97,6 +98,30 @@ fn preview_config(config: Config) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn list_logs() -> Result<Vec<logs::LogFile>, String> {
+    logs::list()
+}
+
+#[tauri::command]
+fn read_log(name: String) -> Result<String, String> {
+    logs::tail(&name)
+}
+
+/// Writes a diagnostics file and returns its path. Not uploaded anywhere: engine logs name the
+/// hosts they saw, so the user reads it before deciding to send it.
+#[tauri::command]
+fn export_diagnostics(logs_wanted: Vec<String>) -> Result<String, String> {
+    let status = match daemon::request(Request::Status) {
+        Ok(Response::Status(s)) => {
+            serde_json::to_string_pretty(&s).unwrap_or_else(|e| format!("(status: {e})"))
+        }
+        Ok(other) => format!("(unexpected reply: {other:?})"),
+        Err(e) => format!("(daemon unreachable: {e})"),
+    };
+    logs::export(&status, &logs_wanted)
+}
+
+#[tauri::command]
 fn list_configs() -> Result<Vec<String>, String> {
     configs::list()
 }
@@ -124,6 +149,9 @@ pub fn run() {
             known_functions,
             starter_config,
             preview_config,
+            list_logs,
+            read_log,
+            export_diagnostics,
             list_configs,
             load_config,
             save_config,
