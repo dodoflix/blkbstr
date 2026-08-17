@@ -58,9 +58,10 @@ jobs:
 
       - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-latest'
-        # Bounded and retried: this step has hung on package downloads for longer than the rest of
-        # the run put together, and a hang should fail rather than occupy a runner.
-        timeout-minutes: 8
+        # webkit2gtk pulls in gstreamer and a lot else, and azure.archive.ubuntu.com has served
+        # it at ~40 kB/s: 6 minutes for 42 packages, measured. Generous bound so normal slowness
+        # passes, but still bounded so a genuine hang fails instead of occupying a runner.
+        timeout-minutes: 15
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
