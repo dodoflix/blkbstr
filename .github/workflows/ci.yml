@@ -5,6 +5,16 @@ on:
     branches: [main]
   pull_request:
 
+# Read-only by default; nothing here publishes anything.
+permissions:
+  contents: read
+
+# A new push makes the previous run irrelevant. Without this they queue up and each one costs a
+# full Tauri build.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -13,18 +23,31 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # Target platforms only. macOS is not one: upstream has no macOS engine, so a build there
+        # would prove nothing we ship. The BSDs have no hosted runner.
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    # A hung step should fail the run, not sit for six hours.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
 
-      # Tauri needs the system webview and its GTK stack; the other platforms ship theirs.
+      # Tauri needs the system webview and its GTK stack; Windows ships WebView2.
       - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-latest'
+        # Without DEBIAN_FRONTEND some of these open a debconf prompt and block until the job is
+        # killed — `apt-get -y` does not cover that.
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
-            patchelf libxdo-dev
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            build-essential
 
       - uses: dtolnay/rust-toolchain@stable
         with:

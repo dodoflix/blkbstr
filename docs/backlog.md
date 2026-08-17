@@ -103,7 +103,7 @@ done in this repository.
 
 ## Project & process
 
-- [x] CI matrix across Linux, Windows and macOS — M0
+- [x] CI matrix across Linux and Windows — M0
 - [x] MIT licence, matching upstream zapret2 — M0
 - [x] Contribution guidelines — M0
 - [ ] Code of conduct — ongoing
