@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD polkit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/software/polkit/policyconfig-1.dtd">
+<policyconfig>
+  <vendor>Blockbuster</vendor>
+  <vendor_url>https://github.com/dodoflix/blkbstr</vendor_url>
+
+  <!--
+    Starting and stopping the engine goes over the socket and needs no authorisation at all: being
+    in the blkbstr group is the permission. This action covers only enabling/disabling the service
+    itself, which the GUI offers from its settings screen.
+  -->
+  <action id="dev.blkbstr.manage-service">
+    <description>Enable or disable the Blockbuster helper service</description>
+    <message>Authentication is required to change whether Blockbuster starts at boot</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.systemd1.unit">blkbstrd.service</annotate>
+  </action>
+</policyconfig>

@@ -1,0 +1,24 @@
+[package]
+name = "blkbstr"
+description = "Blockbuster — a multi-platform GUI for zapret."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+# The `_lib` suffix keeps the lib name distinct from the bin name, which otherwise collides on
+# Windows: https://github.com/rust-lang/cargo/issues/8519
+name = "blkbstr_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+blkbstr-core = { workspace = true }
+interprocess = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"

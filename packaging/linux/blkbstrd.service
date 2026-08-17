@@ -1,0 +1,34 @@
+[Unit]
+Description=Blockbuster privileged helper (zapret2 engine supervisor)
+Documentation=https://github.com/dodoflix/blkbstr
+After=network.target
+
+[Service]
+Type=simple
+# BLKBSTR_GID is written by install.sh; without it the socket stays root-only and the GUI cannot
+# connect.
+EnvironmentFile=/etc/blkbstr/daemon.env
+ExecStart=/usr/local/libexec/blkbstrd --socket-group-gid ${BLKBSTR_GID}
+Restart=on-failure
+RestartSec=2
+
+RuntimeDirectory=blkbstr
+RuntimeDirectoryMode=0755
+LogsDirectory=blkbstr
+
+# The daemon manipulates the firewall and packet queues; it needs those capabilities and nothing
+# else. Drop the rest so a compromised helper is not a general-purpose root shell.
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/log/blkbstr /run/blkbstr
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6 AF_PACKET
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target
