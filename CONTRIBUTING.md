@@ -16,8 +16,7 @@ npm run tauri dev
 
 ## Checks
 
-CI runs these on Linux and Windows, the two platforms with hosted runners that we target. Run them
-before pushing:
+Run these before pushing:
 
 ```sh
 cargo fmt --all -- --check
@@ -25,6 +24,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 npm run build
 ```
+
+CI splits them into two jobs. `core` covers the portable crates and the frontend and needs no
+system packages, so it reports quickly and is where the tests live. `app` builds the GUI crate on
+Linux and Windows, and needs the platform webview — on Linux that means an `apt` step which has
+been the slowest and least reliable part of the run, which is why it is not in the way of the
+tests.
 
 ## What the code should look like
 
