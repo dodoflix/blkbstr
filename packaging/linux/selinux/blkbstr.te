@@ -74,6 +74,15 @@ optional_policy(`
 corecmd_exec_bin(blkbstrd_t)
 files_exec_usr_files(blkbstrd_t)
 
+# A config can point hostlist= or ipset= at a file under the user's home. Off by default: this is
+# a root daemon, and reading someone's home is not something it should acquire quietly.
+#   setsebool -P blkbstrd_read_user_content on
+gen_tunable(blkbstrd_read_user_content, false)
+
+tunable_policy(`blkbstrd_read_user_content',`
+	userdom_read_user_home_content_files(blkbstrd_t)
+')
+
 domain_use_interactive_fds(blkbstrd_t)
 files_read_etc_files(blkbstrd_t)
 miscfiles_read_localization(blkbstrd_t)

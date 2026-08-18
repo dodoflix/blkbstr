@@ -15,6 +15,13 @@ even as root once the bounding set is trimmed. AppArmor and SELinux profiles liv
 Either LSM can refuse netlink and leave the daemon reporting `Operation not permitted` from a
 process running as root, so that error carries a note naming what could have refused it.
 
+Two systemd hardening options cannot be used, and both fail in ways that do not name themselves.
+`MemoryDenyWriteExecute=yes` kills LuaJIT — the attacks are Lua, and the engine exits with
+`runtime code generation failed, restricted kernel?` — and the seccomp filter is inherited by
+children, so it cannot be kept for the daemon alone. `ProtectHome=yes` hides `/home`, so a config
+pointing `hostlist=` at a file the user can see is rejected as missing; the unit uses `read-only`
+instead, and SELinux gates the same thing behind `blkbstrd_read_user_content`.
+
 **Distros.** Package manager detection drives engine installation and must be user-overridable;
 auto-detection will be wrong on derivatives and on anyone's carefully broken system.
 

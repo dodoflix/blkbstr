@@ -28,13 +28,19 @@ CapabilityBoundingSet=CAP_CHOWN CAP_NET_ADMIN CAP_NET_RAW
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
 NoNewPrivileges=yes
 ProtectSystem=strict
-ProtectHome=yes
+# read-only, not yes: a config can point hostlist= or ipset= at a file in the user's home,
+# and `yes` makes /home unreadable, so the engine's own --dry-run rejects a file the user
+# can see. Writing there is still refused.
+ProtectHome=read-only
 PrivateTmp=yes
 ReadWritePaths=/var/log/blkbstr /run/blkbstr /var/lib/blkbstr
 RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6 AF_PACKET
 RestrictNamespaces=yes
 LockPersonality=yes
-MemoryDenyWriteExecute=yes
+# MemoryDenyWriteExecute is deliberately absent. zapret2's attacks are Lua, and LuaJIT
+# mprotects its generated code executable, which the seccomp filter blocks — the engine
+# dies with "runtime code generation failed, restricted kernel?" before it sees a packet.
+# The filter is inherited by children, so it cannot be kept for the daemon alone.
 
 [Install]
 WantedBy=multi-user.target
