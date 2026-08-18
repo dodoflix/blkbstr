@@ -57,6 +57,8 @@ report the service as unreachable.
 
 Remove it with `sudo packaging/linux/uninstall.sh`.
 
+AppArmor and SELinux profiles ship alongside it, loaded by hand rather than by the installer — see [packaging/linux/README.md](packaging/linux/README.md).
+
 To run the daemon unprivileged while developing, point both halves somewhere writable:
 
 ```sh
