@@ -112,6 +112,15 @@ jobs:
       - name: Installer scripts parse
         run: sh -n packaging/linux/install.sh && sh -n packaging/linux/uninstall.sh
 
+      - name: systemd unit parses
+        run: |
+          out=$(systemd-analyze verify packaging/linux/blkbstrd.service 2>&1 || true)
+          # The daemon is not installed on a runner; that complaint is the only expected one.
+          # systemd ignores a directive it does not understand and still exits 0, so the output is
+          # what has to be checked.
+          noise=$(printf '%s\n' "$out" | grep -v 'is not executable' || true)
+          [ -z "$noise" ] || { printf '%s\n' "$noise"; exit 1; }
+
       - name: Profiles agree with the installer on where the daemon lives
         run: |
           libexec=$(sed -n 's/^LIBEXEC=//p' packaging/linux/install.sh)
