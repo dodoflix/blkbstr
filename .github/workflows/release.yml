@@ -1,0 +1,121 @@
+name: Release
+
+# Tag-driven: `git tag v0.1.0 && git push origin v0.1.0`. The release is left as a draft, so
+# publishing is still a person deciding, not a push.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  # Both are for the provenance attestation; without them the signing step fails at the end of a
+  # long build rather than at the start.
+  id-token: write
+  attestations: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Linux only. The Windows service does not exist yet, so a Windows build here would be an
+  # installer for an app with nothing to talk to.
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      # Cheap, and it runs before the twenty-minute build rather than after it.
+      - name: Tag agrees with the version files and the changelog
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          cargo=$(sed -n '/^\[workspace\.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          npm=$(node -p "require('./package.json').version")
+          tauri=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          for v in "$cargo" "$npm" "$tauri"; do
+            [ "$v" = "$tag" ] || { echo "tag says $tag, a version file says $v"; exit 1; }
+          done
+          # The release notes are this version's changelog section, so a tag cut without writing
+          # one fails here rather than publishing a release that says nothing.
+          awk -v hdr="## [$tag]" '
+            index($0, hdr) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > changelog-section.md
+          grep -q '[^[:space:]]' changelog-section.md \
+            || { echo "CHANGELOG.md has no '## [$tag]' section"; exit 1; }
+
+      - name: Install Linux dependencies
+        timeout-minutes: 15
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            build-essential
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - run: npm ci
+      # `tauri build` runs `npm run build` itself via beforeBuildCommand.
+      - run: npm run tauri build
+      - run: cargo build --release -p blkbstr-daemon
+
+      - name: Collect the artefacts
+        run: |
+          mkdir -p dist
+          cp target/release/blkbstrd dist/
+          find target/release/bundle -type f \
+            \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \) -exec cp {} dist/ \;
+          cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
+
+      # Sigstore-backed and keyless: ties each file to this workflow run and commit, with no
+      # signing key for anyone to lose or steal. Signing with a held key is an M3 job, alongside
+      # Windows code signing.
+      - uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: |
+            dist/blkbstrd
+            dist/*.deb
+            dist/*.rpm
+            dist/*.AppImage
+
+      - name: Draft the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            cat changelog-section.md
+            cat <<'EOF'
+          ### Checking what you downloaded
+
+          Anti-censorship tools are an obvious thing to impersonate, so do not take a download page
+          at its word. Every binary below carries a signed provenance attestation naming the commit
+          and workflow run that built it:
+
+          ```sh
+          gh attestation verify blkbstrd -R dodoflix/blkbstr
+          ```
+
+          `SHA256SUMS` covers the same files:
+
+          ```sh
+          sha256sum -c SHA256SUMS
+          ```
+
+          The zapret2 engine is not in here and is versioned separately — Blockbuster drives
+          whichever one you have installed.
+          EOF
+          } > notes.md
+          gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" \
+            --notes-file notes.md dist/*
