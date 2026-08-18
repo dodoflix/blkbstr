@@ -108,4 +108,4 @@ done in this repository.
 - [x] Contribution guidelines — M0
 - [ ] Code of conduct — ongoing
 - [ ] Issue and PR templates — ongoing
-- [ ] Release process: tags, changelog, signed artefacts — M1
+- [x] Release process: tag-driven build, checksums, provenance attestation — M1
