@@ -1,3 +1,5 @@
+<img src="public/icon.svg" alt="" width="96" align="right">
+
 # Blockbuster
 
 A desktop GUI for [zapret2](https://github.com/bol-van/zapret2) — install it, configure it, run it
@@ -40,6 +42,15 @@ npm install
 npm run tauri dev          # run the GUI
 cargo test --workspace     # Rust tests
 npm run build              # type-check and build the frontend
+```
+
+The app icon comes from `public/icon.svg`, which is also the favicon. `tauri icon` cannot read SVG,
+so regenerating the platform icon set means rasterising first:
+
+```sh
+rsvg-convert -w 1024 -h 1024 public/icon.svg -o /tmp/icon.png
+npm run tauri -- icon /tmp/icon.png
+rm -rf src-tauri/icons/android src-tauri/icons/ios   # desktop only
 ```
 
 ## Running the daemon
