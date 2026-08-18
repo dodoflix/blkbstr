@@ -18,7 +18,7 @@ env:
 
 jobs:
   # Linux only. The Windows service does not exist yet, so a Windows build here would be an
-  # installer for an app that cannot reach a daemon.
+  # installer for an app with nothing to talk to.
   linux:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -29,8 +29,8 @@ jobs:
           node-version: 22
           cache: npm
 
-      # Cheap, and it runs before the 20-minute build rather than after it.
-      - name: Tag matches the version in every file that carries one
+      # Cheap, and it runs before the twenty-minute build rather than after it.
+      - name: Tag agrees with the version files and the changelog
         run: |
           tag="${GITHUB_REF_NAME#v}"
           cargo=$(sed -n '/^\[workspace\.package\]/,/^\[/ s/^version = "\(.*\)"/\1/p' Cargo.toml)
@@ -39,6 +39,15 @@ jobs:
           for v in "$cargo" "$npm" "$tauri"; do
             [ "$v" = "$tag" ] || { echo "tag says $tag, a version file says $v"; exit 1; }
           done
+          # The release notes are this version's changelog section, so a tag cut without writing
+          # one fails here rather than publishing a release that says nothing.
+          awk -v hdr="## [$tag]" '
+            index($0, hdr) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > changelog-section.md
+          grep -q '[^[:space:]]' changelog-section.md \
+            || { echo "CHANGELOG.md has no '## [$tag]' section"; exit 1; }
 
       - name: Install Linux dependencies
         timeout-minutes: 15
@@ -70,8 +79,8 @@ jobs:
             \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \) -exec cp {} dist/ \;
           cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
 
-      # Sigstore-backed, keyless: ties each file to this workflow run and commit, with no signing
-      # key for anyone to lose or steal. Binary signing with a held key is an M3 job, alongside
+      # Sigstore-backed and keyless: ties each file to this workflow run and commit, with no
+      # signing key for anyone to lose or steal. Signing with a held key is an M3 job, alongside
       # Windows code signing.
       - uses: actions/attest-build-provenance@v3
         with:
@@ -85,9 +94,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --draft --generate-notes \
-            --title "$GITHUB_REF_NAME" dist/*
           {
+            cat changelog-section.md
             cat <<'EOF'
           ### Checking what you downloaded
 
@@ -107,8 +115,7 @@ jobs:
 
           The zapret2 engine is not in here and is versioned separately — Blockbuster drives
           whichever one you have installed.
-
           EOF
-            gh release view "$GITHUB_REF_NAME" --json body -q .body
           } > notes.md
-          gh release edit "$GITHUB_REF_NAME" --notes-file notes.md
+          gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" \
+            --notes-file notes.md dist/*
