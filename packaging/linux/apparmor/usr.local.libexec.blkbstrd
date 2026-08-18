@@ -24,6 +24,13 @@ profile blkbstrd /usr/local/libexec/blkbstrd flags=(attach_disconnected) {
   capability chown,
 
   /usr/local/libexec/blkbstrd mr,
+  # Reading /proc/self/exe is how the engine is looked for next to the daemon; abstractions/base
+  # does not cover it, and a denial here loses that lookup without saying anything.
+  @{PROC}/@{pid}/exe r,
+
+  # abstractions/base allows creating a unix socket but not binding, listening or accepting on
+  # one. Who may reach the socket stays a file question — mode 0660, group blkbstr.
+  unix (bind, listen, accept, connect, send, receive) type=stream,
 
   # The GUI's socket and the rendered parameter file.
   /run/blkbstr/ rw,
