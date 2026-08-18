@@ -188,8 +188,11 @@ fn set_socket_access(path: &str, gid: Option<u32>) -> Result<()> {
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o660))
         .with_context(|| format!("chmod 660 {path}"))?;
     match gid {
-        Some(gid) => std::os::unix::fs::chown(path, None, Some(gid))
-            .with_context(|| format!("chgrp {gid} {path}"))?,
+        Some(gid) => std::os::unix::fs::chown(path, None, Some(gid)).map_err(|e| {
+            let why = e.to_string();
+            let hint = denial_hint(&why).unwrap_or_default();
+            anyhow::anyhow!("chgrp {gid} {path}: {why}{hint}")
+        })?,
         None => tracing::warn!(
             "no --socket-group-gid given; socket is root-only and the GUI cannot connect"
         ),
@@ -266,11 +269,30 @@ fn handle(request: Request, engine: &Mutex<Result<Engine, String>>) -> Response 
 
 fn engine_failed(e: anyhow::Error) -> Response {
     tracing::error!(error = %e, "engine operation failed");
+    // `{:#}` keeps the anyhow context chain, which is where the actual cause usually is.
+    let mut message = format!("{e:#}");
+    message.push_str(denial_hint(&message).unwrap_or_default());
     Response::Error {
         code: ErrorCode::EngineFailed,
-        // `{:#}` keeps the anyhow context chain, which is where the actual cause usually is.
-        message: format!("{e:#}"),
+        message,
     }
+}
+
+/// An LSM denial reaches us as a plain "Operation not permitted" from `nft` or the engine, which
+/// reads as nonsense in a process already running as root and sends people looking at file modes.
+/// Names the things that can actually refuse it.
+fn denial_hint(message: &str) -> Option<&'static str> {
+    if !cfg!(target_os = "linux") {
+        return None;
+    }
+    ["Operation not permitted", "Permission denied"]
+        .iter()
+        .any(|s| message.contains(s))
+        .then_some(
+            " (running as root, so this was refused by AppArmor, SELinux or the capability \
+             bounding set rather than by file permissions — `journalctl -k -g 'apparmor|avc'` \
+             names the rule; see packaging/linux/README.md)",
+        )
 }
 
 #[cfg(test)]
@@ -282,6 +304,14 @@ mod tests {
     /// machine where zapret2 is not installed, which is every machine before onboarding runs.
     fn no_engine() -> Mutex<Result<Engine, String>> {
         Mutex::new(Err("nfqws2 not found".into()))
+    }
+
+    #[test]
+    fn a_root_denial_says_what_could_have_refused_it() {
+        // Only Linux ships LSM profiles, so only there does the hint point anywhere real.
+        let hint = denial_hint("nft rejected the ruleset: Operation not permitted");
+        assert_eq!(hint.is_some(), cfg!(target_os = "linux"));
+        assert!(denial_hint("nfqws2 not found").is_none());
     }
 
     #[test]

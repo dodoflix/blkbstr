@@ -1,0 +1,88 @@
+policy_module(blkbstr, 1.0.0)
+
+########################################
+#
+# Declarations
+#
+
+## <desc>
+##  <p>Confines blkbstrd, the Blockbuster privileged helper, and labels the directories it owns.</p>
+## </desc>
+
+type blkbstrd_t;
+type blkbstrd_exec_t;
+init_daemon_domain(blkbstrd_t, blkbstrd_exec_t)
+
+# The config to bring back up on boot. Root-owned: it decides what runs as root.
+type blkbstrd_var_lib_t;
+files_type(blkbstrd_var_lib_t)
+
+type blkbstrd_log_t;
+logging_log_file(blkbstrd_log_t)
+
+# Holds the GUI's socket and the rendered engine parameter file.
+type blkbstrd_runtime_t;
+files_pid_file(blkbstrd_runtime_t)
+
+########################################
+#
+# Local policy
+#
+
+# net_admin and net_raw drive nftables and the packet queue; chown is the one call that puts the
+# socket in the blkbstr group so an unprivileged GUI can reach it.
+allow blkbstrd_t self:capability { chown net_admin net_raw };
+allow blkbstrd_t self:process { getsched setsched signal signull };
+allow blkbstrd_t self:fifo_file rw_fifo_file_perms;
+allow blkbstrd_t self:unix_stream_socket create_stream_socket_perms;
+
+# nftables and NFQUEUE are both netlink. Without these the daemon comes up and can neither install
+# rules nor read a packet, which presents as nothing happening.
+allow blkbstrd_t self:netlink_netfilter_socket create_socket_perms;
+allow blkbstrd_t self:netlink_route_socket create_netlink_socket_perms;
+allow blkbstrd_t self:rawip_socket create_socket_perms;
+allow blkbstrd_t self:packet_socket create_socket_perms;
+
+manage_dirs_pattern(blkbstrd_t, blkbstrd_var_lib_t, blkbstrd_var_lib_t)
+manage_files_pattern(blkbstrd_t, blkbstrd_var_lib_t, blkbstrd_var_lib_t)
+files_var_lib_filetrans(blkbstrd_t, blkbstrd_var_lib_t, dir)
+
+manage_dirs_pattern(blkbstrd_t, blkbstrd_log_t, blkbstrd_log_t)
+manage_files_pattern(blkbstrd_t, blkbstrd_log_t, blkbstrd_log_t)
+logging_log_filetrans(blkbstrd_t, blkbstrd_log_t, { dir file })
+
+manage_dirs_pattern(blkbstrd_t, blkbstrd_runtime_t, blkbstrd_runtime_t)
+manage_files_pattern(blkbstrd_t, blkbstrd_runtime_t, blkbstrd_runtime_t)
+manage_sock_files_pattern(blkbstrd_t, blkbstrd_runtime_t, blkbstrd_runtime_t)
+files_pid_filetrans(blkbstrd_t, blkbstrd_runtime_t, { dir file sock_file })
+
+kernel_read_network_state(blkbstrd_t)
+kernel_read_system_state(blkbstrd_t)
+# nft pulls in the nf_tables kernel modules on first use.
+kernel_request_load_module(blkbstrd_t)
+
+# `nft` and `ip`, each of which already has a domain in the base policy.
+optional_policy(`
+	iptables_domtrans(blkbstrd_t)
+')
+optional_policy(`
+	sysnet_domtrans_ifconfig(blkbstrd_t)
+')
+
+# The engine itself. It stays in this domain rather than getting one of its own: it needs the same
+# netlink and raw-socket access, and a second domain would only move the same rules elsewhere.
+corecmd_exec_bin(blkbstrd_t)
+files_exec_usr_files(blkbstrd_t)
+
+# A config can point hostlist= or ipset= at a file under the user's home. Off by default: this is
+# a root daemon, and reading someone's home is not something it should acquire quietly.
+#   setsebool -P blkbstrd_read_user_content on
+gen_tunable(blkbstrd_read_user_content, false)
+
+tunable_policy(`blkbstrd_read_user_content',`
+	userdom_read_user_home_content_files(blkbstrd_t)
+')
+
+domain_use_interactive_fds(blkbstrd_t)
+files_read_etc_files(blkbstrd_t)
+miscfiles_read_localization(blkbstrd_t)

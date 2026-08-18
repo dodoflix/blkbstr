@@ -8,10 +8,19 @@ Per-OS friction that will otherwise be rediscovered painfully, one platform at a
 rather than producing a broken install on OpenRC or runit. Non-systemd support means a second unit
 format and a second way to find the socket; it waits until someone asks.
 
-**Hardening.** The systemd unit drops to `CAP_NET_ADMIN` and `CAP_NET_RAW`. On AppArmor and
-SELinux systems the daemon can still be denied nfqueue or netlink access and will fail in a way
-that looks like "nothing happened" — profiles for both are an M1 task, and the failure needs to
-surface as a diagnosable error rather than silence.
+**Hardening.** The systemd unit drops to `CAP_CHOWN`, `CAP_NET_ADMIN` and `CAP_NET_RAW` —
+`CAP_CHOWN` for the one call that puts the socket in the `blkbstr` group, which fails with `EPERM`
+even as root once the bounding set is trimmed. AppArmor and SELinux profiles live in
+[packaging/linux/](../packaging/linux/README.md) and are loaded by hand, not by the installer.
+Either LSM can refuse netlink and leave the daemon reporting `Operation not permitted` from a
+process running as root, so that error carries a note naming what could have refused it.
+
+Two systemd hardening options cannot be used, and both fail in ways that do not name themselves.
+`MemoryDenyWriteExecute=yes` kills LuaJIT — the attacks are Lua, and the engine exits with
+`runtime code generation failed, restricted kernel?` — and the seccomp filter is inherited by
+children, so it cannot be kept for the daemon alone. `ProtectHome=yes` hides `/home`, so a config
+pointing `hostlist=` at a file the user can see is rejected as missing; the unit uses `read-only`
+instead, and SELinux gates the same thing behind `blkbstrd_read_user_content`.
 
 **Distros.** Package manager detection drives engine installation and must be user-overridable;
 auto-detection will be wrong on derivatives and on anyone's carefully broken system.
