@@ -86,7 +86,7 @@ The onboarding half. This is where the project earns its existence.
   re-test, keep the first that works. Save the winner under a user-chosen name.
 - First-run wizard chaining detection → install → check → auto-configure, re-runnable later from
   the app.
-- Import an existing zapret installation: detect it, back the current config up somewhere the
+- Import an existing zapret2 installation: detect it, back the current config up somewhere the
   user is told about, import it as a preset named `Legacy`.
 - Ephemeral "try it" mode surfaced in the UI, with an automatic revert if the user does not
   confirm within a timeout.
