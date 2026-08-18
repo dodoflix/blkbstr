@@ -337,20 +337,14 @@ fn locate(binary: &str) -> Result<PathBuf> {
         .iter()
         .map(|d| Path::new(d).join(binary)),
     );
-    if let Some(found) = candidates.iter().find(|p| p.is_file()) {
-        return Ok(found.clone());
+    // PATH read directly rather than shelling out to `command -v`: a root daemon that never
+    // execs a shell is one less thing for an LSM profile to allow and for a reader to worry about.
+    if let Some(path) = std::env::var_os("PATH") {
+        candidates.extend(std::env::split_paths(&path).map(|d| d.join(binary)));
     }
 
-    let path = Command::new("sh")
-        .arg("-c")
-        .arg(format!("command -v {binary}"))
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
-        .filter(|p| !p.is_empty());
-    match path {
-        Some(p) => Ok(PathBuf::from(p)),
+    match candidates.iter().find(|p| p.is_file()) {
+        Some(found) => Ok(found.clone()),
         None => bail!(
             "{binary} not found. Install zapret2 (https://github.com/bol-van/zapret2) or place \
              the binary in /opt/zapret2"

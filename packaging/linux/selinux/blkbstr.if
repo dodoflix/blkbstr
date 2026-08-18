@@ -1,0 +1,36 @@
+## <summary>Blockbuster privileged helper.</summary>
+
+########################################
+## <summary>
+##	Connect to blkbstrd over its local socket. This is the whole GUI-facing API: a domain with
+##	this can start and stop the engine, and a domain without it cannot touch the network stack.
+## </summary>
+## <param name="domain">
+##	<summary>Domain allowed access.</summary>
+## </param>
+#
+interface(`blkbstrd_stream_connect',`
+	gen_require(`
+		type blkbstrd_t, blkbstrd_runtime_t;
+	')
+
+	files_search_pids($1)
+	stream_connect_pattern($1, blkbstrd_runtime_t, blkbstrd_runtime_t, blkbstrd_t)
+')
+
+########################################
+## <summary>
+##	Read the daemon's logs. The GUI tails them; it never writes them.
+## </summary>
+## <param name="domain">
+##	<summary>Domain allowed access.</summary>
+## </param>
+#
+interface(`blkbstrd_read_log',`
+	gen_require(`
+		type blkbstrd_log_t;
+	')
+
+	logging_search_logs($1)
+	read_files_pattern($1, blkbstrd_log_t, blkbstrd_log_t)
+')

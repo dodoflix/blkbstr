@@ -100,3 +100,47 @@ jobs:
 
       - run: cargo clippy -p blkbstr --all-targets -- -D warnings
       - run: cargo test -p blkbstr
+
+  # Neither cargo nor npm can check the packaging, and a broken LSM profile is worse than none: it
+  # is loaded by hand, on a machine whoever wrote it is not sitting at.
+  packaging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Installer scripts parse
+        run: sh -n packaging/linux/install.sh && sh -n packaging/linux/uninstall.sh
+
+      - name: Profiles agree with the installer on where the daemon lives
+        run: |
+          libexec=$(sed -n 's/^LIBEXEC=//p' packaging/linux/install.sh)
+          grep -q "$libexec" packaging/linux/apparmor/usr.local.libexec.blkbstrd
+          grep -q "$libexec" packaging/linux/selinux/blkbstr.fc
+
+      - name: AppArmor profile parses
+        timeout-minutes: 10
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 apparmor
+          # -Q parses and compiles without loading; the runner's kernel is not ours to reconfigure.
+          apparmor_parser -Q -K packaging/linux/apparmor/usr.local.libexec.blkbstrd
+
+      - name: SELinux module links against the targeted policy
+        # In a Fedora container because that is where SELinux users are, and because linking is
+        # what catches an interface or type that does not exist — compiling alone does not.
+        run: |
+          docker run --rm -v "$PWD/packaging/linux/selinux:/policy:ro" fedora:41 sh -c '
+            set -eu
+            dnf -q -y install selinux-policy-devel selinux-policy-targeted policycoreutils \
+              setools-console make
+            cp /policy/* /tmp/ && cd /tmp
+            make -f /usr/share/selinux/devel/Makefile blkbstr.pp
+            semodule -n -i blkbstr.pp
+            pol=/var/lib/selinux/targeted/active/policy.kern
+            # The three transitions the daemon cannot work without.
+            sesearch --type_trans -s init_t -t blkbstrd_exec_t -c process "$pol" | grep -q blkbstrd_t
+            sesearch --type_trans -s blkbstrd_t -t iptables_exec_t -c process "$pol" | grep -q iptables_t
+            sesearch -A -s blkbstrd_t -t blkbstrd_t -c netlink_netfilter_socket "$pol" | grep -q bind'

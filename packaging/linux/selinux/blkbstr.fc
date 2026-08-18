@@ -1,0 +1,5 @@
+/usr/local/libexec/blkbstrd	--	gen_context(system_u:object_r:blkbstrd_exec_t,s0)
+
+/var/lib/blkbstr(/.*)?			gen_context(system_u:object_r:blkbstrd_var_lib_t,s0)
+/var/log/blkbstr(/.*)?			gen_context(system_u:object_r:blkbstrd_log_t,s0)
+/run/blkbstr(/.*)?			gen_context(system_u:object_r:blkbstrd_runtime_t,s0)

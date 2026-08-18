@@ -89,7 +89,7 @@ done in this repository.
 
 ## Platform friction
 
-- [ ] AppArmor and SELinux profiles for the Linux daemon — M1
+- [x] AppArmor and SELinux profiles for the Linux daemon — M1
 - [ ] Non-systemd init support — deferred until requested
 - [ ] iptables fallback for kernels older than 5.15 — deferred until requested
 - [ ] AV false-positive submissions to the major vendors — M3, started before release

@@ -21,7 +21,10 @@ StateDirectoryMode=0700
 
 # The daemon manipulates the firewall and packet queues; it needs those capabilities and nothing
 # else. Drop the rest so a compromised helper is not a general-purpose root shell.
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+# CAP_CHOWN is for one call: chgrp'ing the socket to the blkbstr group at startup. Without it that
+# fails with EPERM even as root, and a root-only socket is a service no GUI can reach. It stays out
+# of the ambient set; the engine and nft have no use for it.
+CapabilityBoundingSet=CAP_CHOWN CAP_NET_ADMIN CAP_NET_RAW
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
 NoNewPrivileges=yes
 ProtectSystem=strict

@@ -1,0 +1,52 @@
+# AppArmor profile for blkbstrd, the Blockbuster privileged helper.
+#
+#   sudo apparmor_parser -r -W /etc/apparmor.d/usr.local.libexec.blkbstrd   # load
+#   sudo apparmor_parser -R    /etc/apparmor.d/usr.local.libexec.blkbstrd   # unload
+#
+# Not loaded by install.sh: the daemon runs unconfined without it, and an admin should choose when
+# to confine a process that owns their firewall.
+
+abi <abi/3.0>,
+
+include <tunables/global>
+
+profile blkbstrd /usr/local/libexec/blkbstrd flags=(attach_disconnected) {
+  include <abstractions/base>
+
+  # nftables and NFQUEUE both ride on netlink. Denying either leaves the daemon up with no way to
+  # install rules or read the queue, which looks from the outside like nothing happening at all.
+  capability net_admin,
+  capability net_raw,
+  network netlink raw,
+  network netlink dgram,
+
+  # One call: chgrp'ing the socket to the blkbstr group at startup. See blkbstrd.service.
+  capability chown,
+
+  /usr/local/libexec/blkbstrd mr,
+
+  # The GUI's socket and the rendered parameter file.
+  /run/blkbstr/ rw,
+  /run/blkbstr/** rwk,
+  # Rolling logs, which the GUI tails read-only.
+  /var/log/blkbstr/ rw,
+  /var/log/blkbstr/** rw,
+  # The config to bring back up on boot.
+  /var/lib/blkbstr/ rw,
+  /var/lib/blkbstr/** rw,
+
+  # Both speak netlink and nothing else, so they run inside this profile rather than needing one
+  # each. `ix` keeps their capabilities bounded by ours.
+  /{usr/,}{s,}bin/nft ix,
+  /{usr/,}{s,}bin/ip ix,
+
+  # The engine reads hostlists, ipsets and Lua from wherever the user's config points, so no
+  # profile written here could enumerate its files: `Pux` uses a profile for it if the distro ships
+  # one and runs it unconfined otherwise. It is supervised and signalled from here.
+  /opt/zapret2/nfqws2 Pux,
+  /usr/{local/,}{s,}bin/nfqws2 Pux,
+  /usr/local/libexec/nfqws2 Pux,
+  signal (send) peer=unconfined,
+
+  include if exists <local/usr.local.libexec.blkbstrd>
+}
