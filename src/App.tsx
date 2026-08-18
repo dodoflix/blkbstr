@@ -45,12 +45,16 @@ export default function App() {
         <Tabs.Root defaultValue="status">
           <Tabs.List>
             <Tabs.Trigger value="status">Status</Tabs.Trigger>
+            <Tabs.Trigger value="setup">Setup</Tabs.Trigger>
             <Tabs.Trigger value="configs">Configs</Tabs.Trigger>
             <Tabs.Trigger value="logs">Logs</Tabs.Trigger>
           </Tabs.List>
 
           <Tabs.Content value="status" mt="4">
             <StatusPanel />
+          </Tabs.Content>
+          <Tabs.Content value="setup" mt="4">
+            <SetupPanel />
           </Tabs.Content>
           <Tabs.Content value="configs" mt="4">
             <ConfigsPanel />
@@ -61,6 +65,146 @@ export default function App() {
         </Tabs.Root>
       </Flex>
     </Container>
+  );
+}
+
+/** Green when it is there, amber when it is not, red when it is there and unusable. */
+function Detected({ tool, missing }: { tool?: api.Tool; missing: string }) {
+  if (!tool) return <Badge color="amber">{missing}</Badge>;
+  return (
+    <Flex align="center" gap="2" wrap="wrap">
+      <Badge color="jade">found</Badge>
+      <Text size="1" color="gray">
+        {tool.version ?? tool.path}
+      </Text>
+    </Flex>
+  );
+}
+
+/** What is on this machine. Runs entirely locally, so it works before the service is installed —
+ *  which is exactly when someone needs to know what is missing. */
+function SetupPanel() {
+  const [env, setEnv] = useState<api.Environment>();
+  const [error, setError] = useState<string>();
+
+  const refresh = useCallback(async () => {
+    try {
+      setEnv(await api.detectEnvironment());
+      setError(undefined);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  if (!env) {
+    return (
+      <Text size="2" color="gray">
+        {error ?? "Looking at this machine\u2026"}
+      </Text>
+    );
+  }
+
+  const lua = env.lua;
+  return (
+    <Flex direction="column" gap="3">
+      {error && (
+        <Callout.Root color="red">
+          <Callout.Text>{error}</Callout.Text>
+        </Callout.Root>
+      )}
+
+      {!env.engine && (
+        <Callout.Root color="amber">
+          <Callout.Text>
+            zapret2 is not installed. Blockbuster drives the upstream engine and does not ship one;
+            put <Code>nfqws2</Code> on <Code>PATH</Code> or in <Code>/opt/zapret2</Code>.
+          </Callout.Text>
+        </Callout.Root>
+      )}
+
+      {lua && !lua.supported && (
+        <Callout.Root color="red">
+          <Callout.Text>
+            {lua.version} is too old. zapret2's strategies are Lua, so the engine will start and
+            then fail to load them — LuaJIT 2.1+ or Lua 5.3+ is needed.
+          </Callout.Text>
+        </Callout.Root>
+      )}
+
+      <Card>
+        <DataList.Root>
+          <DataList.Item>
+            <DataList.Label>System</DataList.Label>
+            <DataList.Value>
+              <Flex align="center" gap="2" wrap="wrap">
+                <Badge color={env.platform ? "jade" : "red"}>
+                  {env.platform ?? "unsupported platform"}
+                </Badge>
+                {env.distro && (
+                  <Text size="1" color="gray">
+                    {env.distro.pretty_name ?? env.distro.id}
+                    {env.distro.package_manager && ` \u00b7 ${env.distro.package_manager}`}
+                  </Text>
+                )}
+              </Flex>
+            </DataList.Value>
+          </DataList.Item>
+
+          <DataList.Item>
+            <DataList.Label>Engine</DataList.Label>
+            <DataList.Value>
+              <Detected tool={env.engine} missing="not installed" />
+            </DataList.Value>
+          </DataList.Item>
+
+          <DataList.Item>
+            <DataList.Label>Lua</DataList.Label>
+            <DataList.Value>
+              {lua ? (
+                <Flex align="center" gap="2" wrap="wrap">
+                  <Badge color={lua.supported ? "jade" : "red"}>
+                    {lua.supported ? "found" : "too old"}
+                  </Badge>
+                  <Text size="1" color="gray">
+                    {lua.version ?? lua.path}
+                  </Text>
+                </Flex>
+              ) : (
+                <Badge color="amber">not installed</Badge>
+              )}
+            </DataList.Value>
+          </DataList.Item>
+
+          <DataList.Item>
+            <DataList.Label>nftables</DataList.Label>
+            <DataList.Value>
+              <Detected tool={env.nftables} missing="not installed" />
+            </DataList.Value>
+          </DataList.Item>
+
+          {env.existing_install && (
+            <DataList.Item>
+              <DataList.Label>Existing install</DataList.Label>
+              <DataList.Value>
+                <Text size="1" color="gray">
+                  {env.existing_install}
+                </Text>
+              </DataList.Value>
+            </DataList.Item>
+          )}
+        </DataList.Root>
+      </Card>
+
+      <Flex>
+        <Button variant="soft" onClick={() => void refresh()}>
+          Re-check
+        </Button>
+      </Flex>
+    </Flex>
   );
 }
 
