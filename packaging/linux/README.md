@@ -42,6 +42,13 @@ sudo systemctl restart blkbstrd
 
 Remove it with `sudo semodule -r blkbstr`.
 
+A config can point `hostlist=` or `ipset=` at a file under your home directory. The daemon runs as
+root, so reading there is off by default and is one boolean:
+
+```sh
+sudo setsebool -P blkbstrd_read_user_content on
+```
+
 The module is built and linked against Fedora's targeted policy in CI, and the transitions it
 relies on are asserted there. It has not been run under an enforcing kernel, so treat a denial as
 a bug worth reporting rather than something to work around:
