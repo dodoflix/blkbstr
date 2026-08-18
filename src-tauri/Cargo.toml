@@ -1,6 +1,6 @@
 [package]
 name = "blkbstr"
-description = "Blockbuster — a multi-platform GUI for zapret."
+description = "Blockbuster — a multi-platform GUI for zapret2."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

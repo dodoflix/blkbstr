@@ -35,7 +35,7 @@ export default function App() {
         <Flex align="baseline" gap="3">
           <Heading size="7">Blockbuster</Heading>
           <Text size="2" color="gray">
-            zapret, with a front door
+            zapret2, with a front door
           </Text>
         </Flex>
 

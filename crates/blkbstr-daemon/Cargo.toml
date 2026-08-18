@@ -1,6 +1,6 @@
 [package]
 name = "blkbstr-daemon"
-description = "Privileged helper that owns the zapret engine and the firewall rules."
+description = "Privileged helper that owns the zapret2 engine and the firewall rules."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
