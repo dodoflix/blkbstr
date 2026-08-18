@@ -1,6 +1,4 @@
-<img src="public/icon.svg" alt="" width="96" align="right">
-
-# Blockbuster
+# <img src="public/icon.svg" width="30" alt=""> Blockbuster
 
 A desktop GUI for [zapret2](https://github.com/bol-van/zapret2) — install it, configure it, run it
 as a service, and see what it is doing, without opening a terminal.
