@@ -32,11 +32,14 @@ export default function App() {
   return (
     <Container size="3" p="5">
       <Flex direction="column" gap="4">
-        <Flex align="baseline" gap="3">
-          <Heading size="7">Blockbuster</Heading>
-          <Text size="2" color="gray">
-            zapret2, with a front door
-          </Text>
+        <Flex align="center" gap="3">
+          <img src="/icon.svg" alt="" width="40" height="40" />
+          <Flex align="baseline" gap="3">
+            <Heading size="7">Blockbuster</Heading>
+            <Text size="2" color="gray">
+              zapret2, with a front door
+            </Text>
+          </Flex>
         </Flex>
 
         <Tabs.Root defaultValue="status">
