@@ -23,8 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -82,7 +82,7 @@ jobs:
       # Sigstore-backed and keyless: ties each file to this workflow run and commit, with no
       # signing key for anyone to lose or steal. Signing with a held key is an M3 job, alongside
       # Windows code signing.
-      - uses: actions/attest-build-provenance@v3
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/blkbstrd
