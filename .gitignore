@@ -8,6 +8,10 @@ dist-ssr
 /target
 /src-tauri/gen/schemas
 
+# Scratch files the release workflow writes into the workspace
+changelog-section.md
+notes.md
+
 # Logs
 *.log
 npm-debug.log*
