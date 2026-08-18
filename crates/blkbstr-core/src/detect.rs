@@ -145,13 +145,13 @@ fn lua_runtime() -> Option<LuaRuntime> {
 
 /// `LuaJIT 2.1.1785763465 -- Copyright ...` or `Lua 5.4.8  Copyright ...`
 fn parse_lua_version(line: &str) -> Option<(LuaFlavour, u32, u32)> {
-    let (flavour, rest) = if let Some(rest) = line.strip_prefix("LuaJIT ") {
-        (LuaFlavour::LuaJit, rest)
-    } else if let Some(rest) = line.strip_prefix("Lua ") {
-        (LuaFlavour::Puc, rest)
-    } else {
-        return None;
-    };
+    let (flavour, rest) = line
+        .strip_prefix("LuaJIT ")
+        .map(|rest| (LuaFlavour::LuaJit, rest))
+        .or_else(|| {
+            line.strip_prefix("Lua ")
+                .map(|rest| (LuaFlavour::Puc, rest))
+        })?;
     let mut parts = rest.split_whitespace().next()?.split('.');
     Some((
         flavour,
