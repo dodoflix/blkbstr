@@ -48,6 +48,44 @@ export type EngineStatus = {
   last_error?: string;
 };
 
+export type Tool = { path: string; version?: string };
+
+export type LuaRuntime = Tool & {
+  flavour: "luajit" | "puc";
+  major: number;
+  minor: number;
+  /** False when the engine would start and then fail to load its Lua attacks. */
+  supported: boolean;
+};
+
+export type PackageManager =
+  | "pacman"
+  | "apt"
+  | "dnf"
+  | "zypper"
+  | "apk"
+  | "xbps"
+  | "portage";
+
+export type Distro = {
+  id: string;
+  pretty_name?: string;
+  package_manager?: PackageManager;
+};
+
+/** Absent fields mean "not on this machine". */
+export type Environment = {
+  platform?: "linux" | "windows" | "bsd";
+  engine?: Tool;
+  lua?: LuaRuntime;
+  nftables?: Tool;
+  distro?: Distro;
+  existing_install?: string;
+};
+
+/** Local probes only; no daemon needed, which is the point during onboarding. */
+export const detectEnvironment = () => invoke<Environment>("detect_environment");
+
 export type Warning = {
   /** Null for warnings about the config as a whole. */
   strategy: string | null;

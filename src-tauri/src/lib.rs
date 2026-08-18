@@ -3,6 +3,7 @@ mod daemon;
 mod logs;
 mod service;
 
+use blkbstr_core::detect;
 use blkbstr_core::protocol::{EngineStatus, Request, Response, PROTOCOL_VERSION};
 use blkbstr_core::registry::{self, Warning};
 use blkbstr_core::Config;
@@ -65,6 +66,14 @@ fn engine_start(config: Config, ephemeral: bool) -> Result<(), daemon::Error> {
 #[tauri::command]
 fn engine_stop() -> Result<(), daemon::Error> {
     daemon::request(Request::Stop).map(|_| ())
+}
+
+/// Engine, Lua runtime, nftables, distro, and any zapret2 install already on the machine.
+/// Unprivileged and local: onboarding has to say what is missing while there is still no daemon
+/// to ask, so this never needs one.
+#[tauri::command]
+fn detect_environment() -> detect::Environment {
+    detect::environment()
 }
 
 /// What in this config will not do what it looks like it does. Pure and local — the daemon is not
@@ -178,6 +187,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             daemon_info,
+            detect_environment,
             engine_status,
             engine_start,
             engine_stop,

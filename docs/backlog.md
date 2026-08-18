@@ -8,9 +8,10 @@ done in this repository.
 - [ ] Reachability check against a list of commonly blocked sites, with a per-site verdict — M2
 - [x] Locate the engine binary; refuse by name when missing — M1
 - [x] Report the installed zapret2 version — M1
-- [ ] Check for LuaJIT 2.1+ / Lua 5.3+ before anything else — M2
+- [x] Check for LuaJIT 2.1+ / Lua 5.3+ before anything else — M2
 - [ ] Engine installation per platform, with package-manager detection on Linux — M2 / M3
-- [ ] Linux distro and package-manager auto-detection, user-overridable — M2
+- [ ] Linux distro and package-manager auto-detection — detected from `ID`/`ID_LIKE`; the
+      user-facing override is still missing — M2
 - [ ] First-run wizard: detect → install → check → auto-configure, re-runnable later — M2
 - [ ] Detect an existing zapret2 install, back up its config somewhere the user is told about,
       import it as a preset named `Legacy` — M2

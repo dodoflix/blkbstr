@@ -9,6 +9,7 @@ use crate::firewall::{self, Firewall, InterceptSpec};
 use crate::supervisor::{Decision, Supervisor};
 use anyhow::{bail, Context, Result};
 use blkbstr_core::config::{Config, Strategy};
+use blkbstr_core::detect;
 use blkbstr_core::paths;
 use blkbstr_core::protocol::EngineStatus;
 use blkbstr_core::registry::Platform;
@@ -319,37 +320,13 @@ fn collect_ports<'a>(
     ports.join(",")
 }
 
-/// Looks for the engine next to the daemon, in the usual install locations, then on PATH.
 fn locate(binary: &str) -> Result<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            candidates.push(dir.join(binary));
-        }
-    }
-    candidates.extend(
-        [
-            "/opt/zapret2",
-            "/usr/local/bin",
-            "/usr/bin",
-            "/usr/local/libexec",
-        ]
-        .iter()
-        .map(|d| Path::new(d).join(binary)),
-    );
-    // PATH read directly rather than shelling out to `command -v`: a root daemon that never
-    // execs a shell is one less thing for an LSM profile to allow and for a reader to worry about.
-    if let Some(path) = std::env::var_os("PATH") {
-        candidates.extend(std::env::split_paths(&path).map(|d| d.join(binary)));
-    }
-
-    match candidates.iter().find(|p| p.is_file()) {
-        Some(found) => Ok(found.clone()),
-        None => bail!(
+    detect::locate_engine(binary).with_context(|| {
+        format!(
             "{binary} not found. Install zapret2 (https://github.com/bol-van/zapret2) or place \
              the binary in /opt/zapret2"
-        ),
-    }
+        )
+    })
 }
 
 fn read_version(binary: &Path) -> Option<String> {
