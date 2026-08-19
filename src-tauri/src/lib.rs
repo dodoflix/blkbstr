@@ -185,6 +185,14 @@ fn save_config(config: Config) -> Result<(), String> {
     configs::save(&config)
 }
 
+/// Deleting the file only. If that config is the one running, it keeps running: stopping the
+/// engine is a separate decision and doing it as a side effect of tidying up a list would be a
+/// surprise the user cannot undo.
+#[tauri::command]
+fn delete_config(name: String) -> Result<(), String> {
+    configs::delete(&name)
+}
+
 /// WebKitGTK's DMA-BUF renderer fails on the NVIDIA proprietary driver under Wayland, killing the
 /// process at startup with:
 ///
@@ -246,6 +254,7 @@ pub fn run() {
             list_configs,
             load_config,
             save_config,
+            delete_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

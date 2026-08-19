@@ -184,3 +184,5 @@ export const loadConfig = (name: string) =>
   invoke<Config>("load_config", { name });
 export const saveConfig = (config: Config) =>
   invoke<void>("save_config", { config });
+export const deleteConfig = (name: string) =>
+  invoke<void>("delete_config", { name });

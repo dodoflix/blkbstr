@@ -791,34 +791,160 @@ function StatusPanel() {
 
 function ConfigsPanel() {
   const [names, setNames] = useState<string[]>([]);
+  const [active, setActive] = useState<string>();
+  const [open, setOpen] = useState<string>();
+  const [preview, setPreview] = useState("");
+  const [busy, setBusy] = useState<string>();
+  const [note, setNote] = useState<string>();
+  const [confirming, setConfirming] = useState<string>();
   const [error, setError] = useState<string>();
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     api.listConfigs().then(setNames, (e) => setError(String(e)));
+    api.engineStatus().then(
+      (status) => setActive(status.running ? status.active_config : undefined),
+      () => setActive(undefined),
+    );
   }, []);
 
-  if (error) {
-    return (
-      <Callout.Root color="red">
-        <Callout.Text>{error}</Callout.Text>
-      </Callout.Root>
-    );
-  }
+  useEffect(refresh, [refresh]);
+
+  /** Shows what the engine will actually be given, which is the only way to tell two
+   *  similarly-named configs apart without opening the file. */
+  const show = async (name: string) => {
+    if (open === name) {
+      setOpen(undefined);
+      return;
+    }
+    try {
+      setPreview(await api.previewConfig(await api.loadConfig(name)));
+      setOpen(name);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const use = async (name: string) => {
+    setBusy(name);
+    setError(undefined);
+    try {
+      await api.engineStart(await api.loadConfig(name));
+      setNote(`${name} is running.`);
+      refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const remove = async (name: string) => {
+    setBusy(name);
+    setError(undefined);
+    try {
+      await api.deleteConfig(name);
+      setNote(`Deleted ${name}.`);
+      setConfirming(undefined);
+      if (open === name) setOpen(undefined);
+      refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(undefined);
+    }
+  };
 
   return (
     <Card>
-      {names.length === 0 ? (
-        <Text color="gray">
-          No saved configs yet. The first-run wizard will create one; until
-          then, drop JSON files in the configs directory.
-        </Text>
-      ) : (
-        <Flex direction="column" gap="1">
-          {names.map((name) => (
-            <Text key={name}>{name}</Text>
-          ))}
-        </Flex>
-      )}
+      <Flex direction="column" gap="3">
+        {note && (
+          <Callout.Root color="jade">
+            <Callout.Text>{note}</Callout.Text>
+          </Callout.Root>
+        )}
+        {error && (
+          <Callout.Root color="red">
+            <Callout.Text>{error}</Callout.Text>
+          </Callout.Root>
+        )}
+
+        {names.length === 0 ? (
+          <Text color="gray">
+            No saved configs yet. Find a working strategy on the Setup tab and
+            save it, or drop JSON files in the configs directory.
+          </Text>
+        ) : (
+          <Flex direction="column" gap="2">
+            {names.map((name) => (
+              <Flex key={name} direction="column" gap="2">
+                <Flex align="center" gap="2" wrap="wrap">
+                  <Text weight="medium">{name}</Text>
+                  {name === active && <Badge color="jade">running</Badge>}
+                  <Flex gap="2" ml="auto">
+                    <Button
+                      size="1"
+                      variant="soft"
+                      onClick={() => void show(name)}
+                    >
+                      {open === name ? "Hide" : "Show"}
+                    </Button>
+                    <Button
+                      size="1"
+                      disabled={name === active}
+                      loading={busy === name}
+                      onClick={() => void use(name)}
+                    >
+                      Use
+                    </Button>
+                    {confirming === name ? (
+                      <>
+                        <Button
+                          size="1"
+                          color="red"
+                          loading={busy === name}
+                          onClick={() => void remove(name)}
+                        >
+                          Delete for good
+                        </Button>
+                        <Button
+                          size="1"
+                          variant="soft"
+                          onClick={() => setConfirming(undefined)}
+                        >
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        size="1"
+                        color="red"
+                        variant="soft"
+                        onClick={() => setConfirming(name)}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </Flex>
+                </Flex>
+                {open === name && (
+                  <ScrollArea style={{ maxHeight: "16rem" }}>
+                    <Code
+                      size="1"
+                      style={{
+                        whiteSpace: "pre",
+                        display: "block",
+                        padding: "0.5rem",
+                      }}
+                    >
+                      {preview}
+                    </Code>
+                  </ScrollArea>
+                )}
+              </Flex>
+            ))}
+          </Flex>
+        )}
+      </Flex>
     </Card>
   );
 }
