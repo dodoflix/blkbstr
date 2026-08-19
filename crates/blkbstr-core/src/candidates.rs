@@ -156,6 +156,69 @@ fn split(function: &str, pos: &str) -> Action {
     Action::new(function).with("pos", pos)
 }
 
+/// A candidate and what it costs to run. The cost only ever orders strategies that already work,
+/// so it can be a rough heuristic without being able to hide a working one.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Candidate {
+    pub config: Config,
+    pub cost: u32,
+}
+
+/// The candidate list with each entry's cost.
+pub fn ranked() -> Vec<Candidate> {
+    candidates()
+        .into_iter()
+        .map(|config| Candidate {
+            cost: cost(&config),
+            config,
+        })
+        .collect()
+}
+
+/// How much a strategy disturbs traffic beyond the minimum. Lower is gentler.
+///
+/// The weights say what they are paid for: injected packets are extra traffic that a middlebox or
+/// the server may take badly, a deliberately malformed one more so, and `wssize` is the only thing
+/// here that keeps costing throughput for the whole life of every connection it touches rather than
+/// only during the handshake.
+pub fn cost(config: &Config) -> u32 {
+    let mut cost = 0;
+    for strategy in config.strategies.iter().filter(|s| s.enabled) {
+        for action in &strategy.actions {
+            cost += 1;
+            let repeats = action
+                .args
+                .get("repeats")
+                .and_then(|r| r.parse::<u32>().ok())
+                .unwrap_or(1);
+            cost += match action.function.as_str() {
+                // Sends packets that were never part of the conversation.
+                "fake" | "syndata" | "hostfakesplit" => 3 * repeats,
+                "fakedsplit" | "fakeddisorder" => 2 * repeats,
+                // Shrinks the receive window for every connection on the port, for its whole life.
+                "wssize" => 6,
+                "oob" => 2,
+                _ => 0,
+            };
+            // Each extra cut is another packet on the wire.
+            if let Some(pos) = action.args.get("pos") {
+                cost += pos.split(',').count().saturating_sub(1) as u32;
+            }
+            // Packets built to be discarded somewhere between here and the server.
+            cost += action
+                .args
+                .keys()
+                .filter(|k| {
+                    matches!(k.as_str(), "badsum" | "tcp_md5" | "seqovl")
+                        || k.contains("ttl")
+                        || k.contains("autottl")
+                })
+                .count() as u32;
+        }
+    }
+    cost
+}
+
 fn tls(name: &str, notes: &str, actions: Vec<Action>) -> Config {
     strategy_config(
         name,
@@ -231,6 +294,23 @@ mod tests {
                 .collect();
             assert!(!ports.is_empty(), "{} selects no TCP port", config.name);
         }
+    }
+
+    /// The ranking exists to prefer the gentler of two strategies that both work, so the ordering
+    /// between these three has to hold: splitting alone < injected decoys < a shrunken window.
+    #[test]
+    fn cost_orders_gentle_below_invasive() {
+        let by_name = |name: &str| {
+            let config = candidates()
+                .into_iter()
+                .find(|c| c.name == name)
+                .unwrap_or_else(|| panic!("no candidate named {name}"));
+            cost(&config)
+        };
+        assert!(by_name("multisplit-midsld") < by_name("fake-multidisorder"));
+        assert!(by_name("fake-multidisorder") < by_name("wssize-multisplit"));
+        assert!(by_name("multisplit-2") < by_name("multidisorder-scatter"));
+        assert_eq!(ranked().len(), candidates().len());
     }
 
     #[test]

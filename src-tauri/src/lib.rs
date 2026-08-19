@@ -111,8 +111,8 @@ async fn check_reachability(hosts: Option<Vec<String>>) -> Result<reachability::
 /// progress and cancellation come for free and the privileged surface gains nothing. If the UI
 /// dies mid-walk, the trial run's own deadline puts the machine back.
 #[tauri::command]
-fn autoconfig_candidates() -> Vec<Config> {
-    candidates::candidates()
+fn autoconfig_candidates() -> Vec<candidates::Candidate> {
+    candidates::ranked()
 }
 
 /// What in this config will not do what it looks like it does. Pure and local — the daemon is not

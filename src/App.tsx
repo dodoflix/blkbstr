@@ -10,6 +10,7 @@ import {
   DataList,
   Flex,
   Heading,
+  RadioGroup,
   ScrollArea,
   Select,
   Tabs,
@@ -76,9 +77,32 @@ const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 /** Long enough for the engine to have the rules up and a connection or two to start using them. */
 const SETTLE_MS = 1500;
 
-type Step = { name: string; notes?: string; outcome: string; worked?: boolean };
+type Step = {
+  name: string;
+  notes?: string;
+  outcome: string;
+  /** Undefined while the candidate is still being tried. */
+  worked?: boolean;
+  unblocked: number;
+  cost: number;
+  config: api.Config;
+};
 
-/** Walks the candidate list until the blocked sites load.
+/** Best first: more sites through wins, then the strategy that disturbs traffic least, then the
+ *  earlier one, which is the hand-ranked order.
+ *
+ *  Includes strategies that only got some of the sites through. When nothing gets everything, the
+ *  one that gets most of it is still the best answer available, and hiding it helps nobody. */
+function rank(steps: Step[]): Step[] {
+  return steps
+    .filter((step) => step.unblocked > 0)
+    .sort((a, b) => b.unblocked - a.unblocked || a.cost - b.cost);
+}
+
+/** Tries every candidate and reports all of them that worked.
+ *
+ *  It does not stop at the first success: the first strategy that gets through is not necessarily
+ *  the one to live with, and which trade-off is acceptable is the user's call, not a heuristic's.
  *
  *  The loop lives here rather than in the daemon because every step is already an ordinary
  *  start / check / stop: driving it from the UI costs no privileged surface, makes progress and
@@ -91,10 +115,18 @@ function AutoConfig() {
   const [saveAs, setSaveAs] = useState("auto");
   const [note, setNote] = useState<string>();
   const [error, setError] = useState<string>();
+  const [blockedCount, setBlockedCount] = useState(0);
 
-  const finish = (name: string, outcome: string, worked = false) =>
+  const finish = (
+    name: string,
+    outcome: string,
+    worked = false,
+    unblocked = 0,
+  ) =>
     setSteps((prev) =>
-      prev.map((step) => (step.name === name ? { ...step, outcome, worked } : step)),
+      prev.map((step) =>
+        step.name === name ? { ...step, outcome, worked, unblocked } : step,
+      ),
     );
 
   const run = async () => {
@@ -114,38 +146,79 @@ function AutoConfig() {
       const blocked = baseline.sites
         .filter((site) => site.verdict !== "fine")
         .map((site) => site.host);
+      setBlockedCount(blocked.length);
       if (blocked.length === 0) {
-        setNote("Every site on the list already loads. There is nothing to work around.");
+        setNote(
+          "Every site on the list already loads. There is nothing to work around.",
+        );
         return;
       }
 
-      for (const candidate of await api.autoconfigCandidates()) {
+      const tried: Step[] = [];
+      for (const { config, cost } of await api.autoconfigCandidates()) {
         setSteps((prev) => [
           ...prev,
-          { name: candidate.name, notes: candidate.notes, outcome: "trying…" },
+          {
+            name: config.name,
+            notes: config.notes,
+            outcome: "trying…",
+            unblocked: 0,
+            cost,
+            config,
+          },
         ]);
+        let step: Step = {
+          name: config.name,
+          notes: config.notes,
+          outcome: "",
+          unblocked: 0,
+          cost,
+          config,
+        };
         try {
-          await api.engineStart(candidate, true);
+          await api.engineStart(config, true);
         } catch (e) {
-          // The engine's own --dry-run refuses a config it cannot load, before any rule is
-          // installed. That is a candidate to skip, not a reason to stop.
-          finish(candidate.name, `the engine refused it: ${e}`);
+          // The engine refuses a config it cannot load before any rule is installed. That is a
+          // candidate to skip, not a reason to stop.
+          finish(config.name, `the engine refused it: ${e}`);
           continue;
         }
         await sleep(SETTLE_MS);
         const report = await api.checkReachability(blocked);
-        const stillBlocked = report.sites.filter((site) => site.verdict !== "fine");
-        if (stillBlocked.length === 0) {
-          finish(candidate.name, `all ${blocked.length} load`, true);
-          setWinner(candidate);
-          setSaveAs(candidate.name);
-          return;
-        }
-        finish(candidate.name, `${stillBlocked.length} of ${blocked.length} still blocked`);
+        // Always stop: every candidate is measured against the same untouched machine, and the
+        // one the user settles on is started again by name when they keep it.
         await api.engineStop();
+
+        const unblocked = report.sites.filter(
+          (site) => site.verdict === "fine",
+        ).length;
+        const worked = unblocked === blocked.length;
+        step = { ...step, worked, unblocked };
+        tried.push(step);
+        finish(
+          config.name,
+          worked
+            ? `all ${blocked.length} load`
+            : `${blocked.length - unblocked} of ${blocked.length} still blocked`,
+          worked,
+          unblocked,
+        );
       }
-      setError(
-        "None of the strategies got everything through. The engine is stopped and the machine is back as it was.",
+
+      const helped = rank(tried);
+      if (helped.length === 0) {
+        setError(
+          "No strategy got anything through. The engine is stopped and the machine is back as it was.",
+        );
+        return;
+      }
+      setWinner(helped[0].config);
+      setSaveAs(helped[0].config.name);
+      const best = helped[0].unblocked;
+      setNote(
+        best === blocked.length
+          ? `${helped.filter((s) => s.worked).length} of ${tried.length} strategies got everything through. The gentlest is picked for you; any of them can be used instead.`
+          : `Nothing got all ${blocked.length} through. The best got ${best}. Pick one or try again later — a censor is not the same from one hour to the next.`,
       );
     } catch (e) {
       setError(String(e));
@@ -170,6 +243,8 @@ function AutoConfig() {
     }
   };
 
+  const working = rank(steps);
+
   return (
     <Card>
       <Flex direction="column" gap="3">
@@ -178,8 +253,9 @@ function AutoConfig() {
             Find a working strategy
           </Button>
           <Text size="1" color="gray">
-            Tries each strategy for a few seconds and keeps the first that gets the blocked sites
-            through. Nothing is kept until you say so.
+            Tries every strategy for a few seconds each, then lists the ones
+            that got the blocked sites through, gentlest first. Nothing is kept
+            until you say so.
           </Text>
         </Flex>
 
@@ -194,6 +270,41 @@ function AutoConfig() {
           </Callout.Root>
         )}
 
+        {working.length > 0 && (
+          <Flex direction="column" gap="2">
+            <Heading size="2">Strategies that helped</Heading>
+            <RadioGroup.Root
+              value={winner?.name ?? ""}
+              onValueChange={(name) => {
+                const picked = working.find((step) => step.name === name);
+                if (picked) {
+                  setWinner(picked.config);
+                  setSaveAs(picked.name);
+                }
+              }}
+            >
+              <Flex direction="column" gap="2">
+                {working.map((step, i) => (
+                  <RadioGroup.Item key={step.name} value={step.name}>
+                    <Flex align="center" gap="2" wrap="wrap">
+                      <Text size="2">{step.name}</Text>
+                      {i === 0 && <Badge color="jade">gentlest</Badge>}
+                      {!step.worked && (
+                        <Badge color="amber">
+                          {step.unblocked} of {blockedCount}
+                        </Badge>
+                      )}
+                      <Text size="1" color="gray">
+                        disturbance {step.cost} · {step.notes}
+                      </Text>
+                    </Flex>
+                  </RadioGroup.Item>
+                ))}
+              </Flex>
+            </RadioGroup.Root>
+          </Flex>
+        )}
+
         {steps.length > 0 && (
           <DataList.Root>
             {steps.map((step) => (
@@ -202,7 +313,9 @@ function AutoConfig() {
                 <DataList.Value>
                   <Flex direction="column">
                     <Flex align="center" gap="2" wrap="wrap">
-                      <Badge color={step.worked ? "jade" : "gray"}>{step.outcome}</Badge>
+                      <Badge color={step.worked ? "jade" : "gray"}>
+                        {step.outcome}
+                      </Badge>
                     </Flex>
                     {step.notes && (
                       <Text size="1" color="gray">
@@ -238,7 +351,10 @@ function AutoConfig() {
 }
 
 /** What each verdict means in one phrase, and how alarmed to look about it. */
-const VERDICTS: Record<api.Verdict, { label: string; color: "jade" | "amber" | "red" }> = {
+const VERDICTS: Record<
+  api.Verdict,
+  { label: string; color: "jade" | "amber" | "red" }
+> = {
   fine: { label: "reachable", color: "jade" },
   dns_failed: { label: "DNS failed", color: "amber" },
   dns_poisoned: { label: "DNS poisoned", color: "red" },
@@ -330,8 +446,9 @@ function SetupPanel() {
       {!env.engine && (
         <Callout.Root color="amber">
           <Callout.Text>
-            zapret2 is not installed. Blockbuster drives the upstream engine and does not ship one;
-            put <Code>nfqws2</Code> on <Code>PATH</Code> or in <Code>/opt/zapret2</Code>.
+            zapret2 is not installed. Blockbuster drives the upstream engine and
+            does not ship one; put <Code>nfqws2</Code> on <Code>PATH</Code> or
+            in <Code>/opt/zapret2</Code>.
           </Callout.Text>
         </Callout.Root>
       )}
@@ -339,8 +456,9 @@ function SetupPanel() {
       {lua && !lua.supported && (
         <Callout.Root color="red">
           <Callout.Text>
-            {lua.version} is too old. zapret2's strategies are Lua, so the engine will start and
-            then fail to load them — LuaJIT 2.1+ or Lua 5.3+ is needed.
+            {lua.version} is too old. zapret2's strategies are Lua, so the
+            engine will start and then fail to load them — LuaJIT 2.1+ or Lua
+            5.3+ is needed.
           </Callout.Text>
         </Callout.Root>
       )}
@@ -357,7 +475,8 @@ function SetupPanel() {
                 {env.distro && (
                   <Text size="1" color="gray">
                     {env.distro.pretty_name ?? env.distro.id}
-                    {env.distro.package_manager && ` \u00b7 ${env.distro.package_manager}`}
+                    {env.distro.package_manager &&
+                      ` \u00b7 ${env.distro.package_manager}`}
                   </Text>
                 )}
               </Flex>
@@ -423,8 +542,9 @@ function SetupPanel() {
           {!report.network_ok && (
             <Callout.Root color="amber" mb="3">
               <Callout.Text>
-                Even <Code>{report.control.host}</Code> did not answer, so this is the network
-                rather than a censor. Nothing below means anything until that is fixed.
+                Even <Code>{report.control.host}</Code> did not answer, so this
+                is the network rather than a censor. Nothing below means
+                anything until that is fixed.
               </Callout.Text>
             </Callout.Root>
           )}
@@ -491,8 +611,8 @@ function StatusPanel() {
       {daemon && !daemon.reachable && (
         <Callout.Root color="amber">
           <Callout.Text>
-            The privileged service is not reachable, so nothing can be started. Install it with{" "}
-            <Code>packaging/linux/install.sh</Code>.
+            The privileged service is not reachable, so nothing can be started.
+            Install it with <Code>packaging/linux/install.sh</Code>.
             {daemon.problem && (
               <>
                 <br />
@@ -591,9 +711,9 @@ function StatusPanel() {
           <Callout.Text>
             <Flex align="center" gap="3" wrap="wrap">
               <Text>
-                Trying <Code>{status.active_config}</Code>. It reverts on its own in{" "}
-                {countdown(status.revert_in_seconds)} unless you keep it — so if this broke your
-                connection, doing nothing fixes it.
+                Trying <Code>{status.active_config}</Code>. It reverts on its
+                own in {countdown(status.revert_in_seconds)} unless you keep it
+                — so if this broke your connection, doing nothing fixes it.
               </Text>
               <Button size="1" onClick={() => void act(api.engineConfirm)}>
                 Keep it
@@ -615,17 +735,13 @@ function StatusPanel() {
         <Flex gap="2" align="center" wrap="wrap">
           <Button
             variant="soft"
-            onClick={() =>
-              void act(() => api.serviceSetActive(!svc.active))
-            }
+            onClick={() => void act(() => api.serviceSetActive(!svc.active))}
           >
             {svc.active ? "Stop service" : "Start service"}
           </Button>
           <Button
             variant="soft"
-            onClick={() =>
-              void act(() => api.serviceSetEnabled(!svc.enabled))
-            }
+            onClick={() => void act(() => api.serviceSetEnabled(!svc.enabled))}
           >
             {svc.enabled ? "Don't start at boot" : "Start at boot"}
           </Button>
@@ -642,7 +758,9 @@ function StatusPanel() {
         <Button
           disabled={!daemon?.reachable || status?.running}
           onClick={() =>
-            void act(async () => api.engineStart(await api.starterConfig("default")))
+            void act(async () =>
+              api.engineStart(await api.starterConfig("default")),
+            )
           }
         >
           Start
@@ -691,8 +809,8 @@ function ConfigsPanel() {
     <Card>
       {names.length === 0 ? (
         <Text color="gray">
-          No saved configs yet. The first-run wizard will create one; until then, drop JSON files
-          in the configs directory.
+          No saved configs yet. The first-run wizard will create one; until
+          then, drop JSON files in the configs directory.
         </Text>
       ) : (
         <Flex direction="column" gap="1">
@@ -715,10 +833,13 @@ function LogsPanel() {
   const [exported, setExported] = useState<string>();
 
   useEffect(() => {
-    api.listLogs().then((found) => {
-      setFiles(found);
-      setSelected((current) => current ?? found[0]?.name);
-    }, (e) => setError(String(e)));
+    api.listLogs().then(
+      (found) => {
+        setFiles(found);
+        setSelected((current) => current ?? found[0]?.name);
+      },
+      (e) => setError(String(e)),
+    );
   }, []);
 
   useEffect(() => {
