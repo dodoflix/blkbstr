@@ -34,17 +34,24 @@ failing in an interesting way three requests later.
 | `ping` | `protocol` | Liveness plus version handshake. Also how the GUI learns the service is installed at all |
 | `status` | — | Current engine state |
 | `start` | `config`, `ephemeral` | Apply a config and start the engine |
+| `confirm` | — | Keep a trial run: cancels its revert and records it as active |
 | `stop` | — | Stop the engine and restore the firewall |
 
 `ephemeral: true` runs the config without recording it as active, so a failed experiment is undone
-by a restart. This is the transport half of the "try it" mode in the UI.
+by a restart. It also arms a deadline: unless a `confirm` arrives within two minutes, the daemon
+stops the engine and removes the rules by itself, and `status` reports why.
+
+That deadline lives in the daemon rather than the GUI on purpose. The case it exists for is the
+one where the GUI cannot help — a strategy that takes the network down with it, or a client that
+died with the rules still up. A timer in the process that owns the firewall is the only one that
+still runs then. `BLKBSTR_REVERT_SECONDS` shortens it for testing.
 
 `status` never fails. A daemon with no engine — because zapret2 is not installed — still answers,
 with the reason in `last_error`, so the GUI can explain the situation instead of rendering a failed
 request.
 
 ```json
-{"op":"ping","protocol":1}
+{"op":"ping","protocol":2}
 {"op":"start","config":{"schema":1,"name":"home-isp","strategies":[]},"ephemeral":true}
 ```
 
@@ -52,7 +59,7 @@ request.
 
 ```json
 {"result":"pong","daemon_version":"0.1.0","protocol":1}
-{"result":"status","running":true,"active_config":"home-isp","ephemeral":false,"pid":4211}
+{"result":"status","running":true,"active_config":"home-isp","ephemeral":true,"revert_in_seconds":97,"pid":4211}
 {"result":"status","running":false,"ephemeral":false,"last_error":"engine exited: signal: 9"}
 {"result":"ok"}
 {"result":"error","code":"engine_failed","message":"nfqws2 exited with status 1"}

@@ -46,6 +46,8 @@ export type EngineStatus = {
   started_at?: number;
   engine_version?: string;
   last_error?: string;
+  /** Seconds until an unconfirmed trial run is undone; absent once kept. */
+  revert_in_seconds?: number;
 };
 
 export type Tool = { path: string; version?: string };
@@ -166,6 +168,8 @@ export const daemonInfo = () => invoke<DaemonInfo>("daemon_info");
 export const engineStatus = () => invoke<EngineStatus>("engine_status");
 export const engineStart = (config: Config, ephemeral = false) =>
   invoke<void>("engine_start", { config, ephemeral });
+/** Cancels the daemon's automatic revert and persists the config. */
+export const engineConfirm = () => invoke<void>("engine_confirm");
 export const engineStop = () => invoke<void>("engine_stop");
 
 /** Local and pure; safe to call on every keystroke. */

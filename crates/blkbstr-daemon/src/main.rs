@@ -254,6 +254,16 @@ fn handle(request: Request, engine: &Mutex<Result<Engine, String>>) -> Response 
                 },
             }
         }
+        Request::Confirm => match guard.as_mut() {
+            Ok(engine) => match engine.confirm() {
+                Ok(()) => Response::Ok,
+                Err(e) => engine_failed(e),
+            },
+            Err(why) => Response::Error {
+                code: ErrorCode::EngineFailed,
+                message: why.clone(),
+            },
+        },
         Request::Stop => match guard.as_mut() {
             Ok(engine) => match engine.stop() {
                 Ok(()) => Response::Ok,
