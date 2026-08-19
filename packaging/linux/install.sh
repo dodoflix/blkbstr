@@ -17,8 +17,12 @@ GID=$(getent group blkbstr | cut -d: -f3)
 
 # SUDO_USER is the human who ran sudo; without it there is nobody to add.
 if [ -n "${SUDO_USER:-}" ]; then
-    usermod -aG blkbstr "$SUDO_USER"
-    echo "added $SUDO_USER to the blkbstr group — log out and back in for it to take effect"
+    if id -nG "$SUDO_USER" | tr ' ' '\n' | grep -qx blkbstr; then
+        echo "$SUDO_USER is already in the blkbstr group"
+    else
+        usermod -aG blkbstr "$SUDO_USER"
+        echo "added $SUDO_USER to the blkbstr group — log out and back in for it to take effect"
+    fi
 else
     echo "warning: no SUDO_USER; add your account with: usermod -aG blkbstr <user>" >&2
 fi
