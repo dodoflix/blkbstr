@@ -86,6 +86,34 @@ export type Environment = {
 /** Local probes only; no daemon needed, which is the point during onboarding. */
 export const detectEnvironment = () => invoke<Environment>("detect_environment");
 
+export type Verdict =
+  | "fine"
+  | "dns_failed"
+  | "dns_poisoned"
+  | "tcp_blocked"
+  | "tls_reset"
+  | "tls_silent"
+  | "bad_host";
+
+export type SiteResult = {
+  host: string;
+  verdict: Verdict;
+  detail?: string;
+  elapsed_ms: number;
+};
+
+export type Report = {
+  /** False when even the control host failed: the network is down, so no other verdict means anything. */
+  network_ok: boolean;
+  control: SiteResult;
+  sites: SiteResult[];
+};
+
+/** Seconds, not milliseconds — an unreachable host costs a full timeout. Omit `hosts` for the
+ *  built-in list. Nothing is uploaded and the list never leaves the machine. */
+export const checkReachability = (hosts?: string[]) =>
+  invoke<Report>("check_reachability", { hosts });
+
 export type Warning = {
   /** Null for warnings about the config as a whole. */
   strategy: string | null;

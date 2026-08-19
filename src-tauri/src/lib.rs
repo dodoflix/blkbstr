@@ -5,6 +5,7 @@ mod service;
 
 use blkbstr_core::detect;
 use blkbstr_core::protocol::{EngineStatus, Request, Response, PROTOCOL_VERSION};
+use blkbstr_core::reachability;
 use blkbstr_core::registry::{self, Warning};
 use blkbstr_core::Config;
 use serde::Serialize;
@@ -74,6 +75,26 @@ fn engine_stop() -> Result<(), daemon::Error> {
 #[tauri::command]
 fn detect_environment() -> detect::Environment {
     detect::environment()
+}
+
+/// Probes each host for a per-site verdict. Local network only — no daemon, nothing uploaded, and
+/// the host list never leaves the machine.
+///
+/// Blocking work on a pool thread rather than the async runtime: an unreachable host costs a full
+/// timeout, and the whole point of this call is to sit through those.
+#[tauri::command]
+async fn check_reachability(hosts: Option<Vec<String>>) -> Result<reachability::Report, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let hosts = hosts.unwrap_or_else(|| {
+            reachability::DEFAULT_HOSTS
+                .iter()
+                .map(|h| (*h).to_owned())
+                .collect()
+        });
+        reachability::check(&hosts, reachability::DEFAULT_TIMEOUT)
+    })
+    .await
+    .map_err(|e| format!("the reachability check did not finish: {e}"))
 }
 
 /// What in this config will not do what it looks like it does. Pure and local — the daemon is not
@@ -188,6 +209,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             daemon_info,
             detect_environment,
+            check_reachability,
             engine_status,
             engine_start,
             engine_stop,

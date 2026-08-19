@@ -4,6 +4,7 @@ pub mod config;
 pub mod detect;
 pub mod paths;
 pub mod protocol;
+pub mod reachability;
 pub mod registry;
 pub mod render;
 
