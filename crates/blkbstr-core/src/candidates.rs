@@ -235,16 +235,19 @@ mod render_tests {
         }
     }
 
+    /// `--name` and not `--new`: profile 1 is already open, so `--new` would leave it empty, and an
+    /// empty profile matches every packet and passes it through untouched.
     #[test]
     fn each_candidate_renders_one_profile_with_at_least_one_action() {
         for config in candidates() {
             let rendered = parameter_file(&config, &options());
             assert_eq!(
-                rendered.matches("--new=").count(),
+                rendered.matches("--name=").count(),
                 1,
                 "{}: {rendered}",
                 config.name
             );
+            assert_eq!(rendered.matches("--new=").count(), 0, "{}", config.name);
             assert!(
                 rendered.contains("--lua-desync="),
                 "{}: {rendered}",

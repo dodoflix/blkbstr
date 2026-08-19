@@ -67,9 +67,13 @@ pub fn parameter_file(config: &Config, engine: &EngineOptions) -> String {
         lines.push(format!("--lua-init=@{script}"));
     }
 
-    for strategy in config.strategies.iter().filter(|s| s.enabled) {
+    // nfqws2 has profile 1 open before it reads anything, so `--new` for the first strategy leaves
+    // that one empty — and an empty profile has no filters, matches every packet first, and passes
+    // it through: "desync profile 1 (noname) matches / no lua functions in this profile".
+    for (n, strategy) in config.strategies.iter().filter(|s| s.enabled).enumerate() {
         lines.push(String::new());
-        lines.push(format!("--new={}", strategy.name));
+        let flag = if n == 0 { "--name" } else { "--new" };
+        lines.push(format!("{flag}={}", strategy.name));
         lines.extend(filter_lines(&strategy.filter));
         for action in &strategy.actions {
             lines.extend(action_lines(action));
@@ -184,7 +188,7 @@ mod tests {
                 "--pidfile=/run/blkbstr/engine.pid",
                 "--debug=@/var/log/blkbstr/engine.log",
                 "--lua-init=@/opt/zapret2/lua/zapret-lib.lua",
-                "--new=https",
+                "--name=https",
                 "--filter-tcp=443",
                 "--filter-l7=tls",
                 "--payload=tls_client_hello",
@@ -250,7 +254,7 @@ mod tests {
         let mut config = starter_config("t");
         config.strategies[0].enabled = false;
         let out = parameter_file(&config, &engine());
-        assert!(!out.contains("--new="), "{out}");
+        assert!(!out.contains("--name=") && !out.contains("--new="), "{out}");
     }
 
     #[test]
