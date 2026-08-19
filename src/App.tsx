@@ -54,7 +54,10 @@ export default function App() {
             <StatusPanel />
           </Tabs.Content>
           <Tabs.Content value="setup" mt="4">
-            <SetupPanel />
+            <Flex direction="column" gap="4">
+              <SetupPanel />
+              <AutoConfig />
+            </Flex>
           </Tabs.Content>
           <Tabs.Content value="configs" mt="4">
             <ConfigsPanel />
@@ -65,6 +68,172 @@ export default function App() {
         </Tabs.Root>
       </Flex>
     </Container>
+  );
+}
+
+const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
+
+/** Long enough for the engine to have the rules up and a connection or two to start using them. */
+const SETTLE_MS = 1500;
+
+type Step = { name: string; notes?: string; outcome: string; worked?: boolean };
+
+/** Walks the candidate list until the blocked sites load.
+ *
+ *  The loop lives here rather than in the daemon because every step is already an ordinary
+ *  start / check / stop: driving it from the UI costs no privileged surface, makes progress and
+ *  cancellation free, and if this window dies mid-walk the trial run's own deadline puts the
+ *  machine back. */
+function AutoConfig() {
+  const [steps, setSteps] = useState<Step[]>([]);
+  const [running, setRunning] = useState(false);
+  const [winner, setWinner] = useState<api.Config>();
+  const [saveAs, setSaveAs] = useState("auto");
+  const [note, setNote] = useState<string>();
+  const [error, setError] = useState<string>();
+
+  const finish = (name: string, outcome: string, worked = false) =>
+    setSteps((prev) =>
+      prev.map((step) => (step.name === name ? { ...step, outcome, worked } : step)),
+    );
+
+  const run = async () => {
+    setRunning(true);
+    setSteps([]);
+    setWinner(undefined);
+    setNote(undefined);
+    setError(undefined);
+    try {
+      const baseline = await api.checkReachability();
+      if (!baseline.network_ok) {
+        setError(
+          `Even ${baseline.control.host} did not answer, so this is the network rather than a censor. Nothing can be measured until that is fixed.`,
+        );
+        return;
+      }
+      const blocked = baseline.sites
+        .filter((site) => site.verdict !== "fine")
+        .map((site) => site.host);
+      if (blocked.length === 0) {
+        setNote("Every site on the list already loads. There is nothing to work around.");
+        return;
+      }
+
+      for (const candidate of await api.autoconfigCandidates()) {
+        setSteps((prev) => [
+          ...prev,
+          { name: candidate.name, notes: candidate.notes, outcome: "trying…" },
+        ]);
+        try {
+          await api.engineStart(candidate, true);
+        } catch (e) {
+          // The engine's own --dry-run refuses a config it cannot load, before any rule is
+          // installed. That is a candidate to skip, not a reason to stop.
+          finish(candidate.name, `the engine refused it: ${e}`);
+          continue;
+        }
+        await sleep(SETTLE_MS);
+        const report = await api.checkReachability(blocked);
+        const stillBlocked = report.sites.filter((site) => site.verdict !== "fine");
+        if (stillBlocked.length === 0) {
+          finish(candidate.name, `all ${blocked.length} load`, true);
+          setWinner(candidate);
+          setSaveAs(candidate.name);
+          return;
+        }
+        finish(candidate.name, `${stillBlocked.length} of ${blocked.length} still blocked`);
+        await api.engineStop();
+      }
+      setError(
+        "None of the strategies got everything through. The engine is stopped and the machine is back as it was.",
+      );
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  /** Restarts under the chosen name before confirming, so the saved file, the running config and
+   *  the one that comes back at boot all say the same thing. */
+  const keep = async () => {
+    if (!winner) return;
+    const named = { ...winner, name: saveAs };
+    try {
+      await api.engineStart(named, true);
+      await api.engineConfirm();
+      await api.saveConfig(named);
+      setNote(`Saved as ${saveAs} and kept. It will come back after a reboot.`);
+      setWinner(undefined);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  return (
+    <Card>
+      <Flex direction="column" gap="3">
+        <Flex align="center" gap="3" wrap="wrap">
+          <Button onClick={() => void run()} loading={running}>
+            Find a working strategy
+          </Button>
+          <Text size="1" color="gray">
+            Tries each strategy for a few seconds and keeps the first that gets the blocked sites
+            through. Nothing is kept until you say so.
+          </Text>
+        </Flex>
+
+        {note && (
+          <Callout.Root color="jade">
+            <Callout.Text>{note}</Callout.Text>
+          </Callout.Root>
+        )}
+        {error && (
+          <Callout.Root color="amber">
+            <Callout.Text>{error}</Callout.Text>
+          </Callout.Root>
+        )}
+
+        {steps.length > 0 && (
+          <DataList.Root>
+            {steps.map((step) => (
+              <DataList.Item key={step.name}>
+                <DataList.Label>{step.name}</DataList.Label>
+                <DataList.Value>
+                  <Flex direction="column">
+                    <Flex align="center" gap="2" wrap="wrap">
+                      <Badge color={step.worked ? "jade" : "gray"}>{step.outcome}</Badge>
+                    </Flex>
+                    {step.notes && (
+                      <Text size="1" color="gray">
+                        {step.notes}
+                      </Text>
+                    )}
+                  </Flex>
+                </DataList.Value>
+              </DataList.Item>
+            ))}
+          </DataList.Root>
+        )}
+
+        {winner && (
+          <Flex align="center" gap="2" wrap="wrap">
+            <Text size="2">Save it as</Text>
+            <TextField.Root
+              value={saveAs}
+              onChange={(e) => setSaveAs(e.currentTarget.value)}
+              style={{ width: "12rem" }}
+            />
+            <Button onClick={() => void keep()} disabled={!saveAs.trim()}>
+              Save and keep
+            </Button>
+            <Text size="1" color="gray">
+              Until you do, it reverts on its own.
+            </Text>
+          </Flex>
+        )}
+      </Flex>
+    </Card>
   );
 }
 

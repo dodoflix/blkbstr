@@ -26,9 +26,10 @@ done in this repository.
 - [x] Save, list and load named configs in the user's own directory — M0
 - [ ] Config editor UI with live linting — M2
 - [x] Ephemeral "try it" mode with confirm-or-revert timeout — M2
-- [ ] Auto-configuration: rank candidate strategies, apply each ephemerally, re-test, keep the
-      first that works, save under a user-chosen name. Wrap upstream `blockcheck2.sh` rather than
-      reimplementing it — M2
+- [x] Auto-configuration: rank candidate strategies, apply each ephemerally, re-test, keep the
+      first that works, save under a user-chosen name — M2. Built on our own reachability check
+      rather than wrapping `blockcheck2.sh`: the walk needs a fast structured oracle it can call
+      between candidates, which an interactive shell script is not
 - [ ] Optional sync to a user-supplied GitHub repo — M4
 - [ ] Client-side encryption for synced configs — M4
 

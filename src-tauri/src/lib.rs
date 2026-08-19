@@ -3,6 +3,7 @@ mod daemon;
 mod logs;
 mod service;
 
+use blkbstr_core::candidates;
 use blkbstr_core::detect;
 use blkbstr_core::protocol::{EngineStatus, Request, Response, PROTOCOL_VERSION};
 use blkbstr_core::reachability;
@@ -102,6 +103,16 @@ async fn check_reachability(hosts: Option<Vec<String>>) -> Result<reachability::
     })
     .await
     .map_err(|e| format!("the reachability check did not finish: {e}"))
+}
+
+/// The strategies auto-configuration tries, in the order worth trying them.
+///
+/// The walk itself runs in the UI, not here: each step is an ordinary start / check / stop, so
+/// progress and cancellation come for free and the privileged surface gains nothing. If the UI
+/// dies mid-walk, the trial run's own deadline puts the machine back.
+#[tauri::command]
+fn autoconfig_candidates() -> Vec<Config> {
+    candidates::candidates()
 }
 
 /// What in this config will not do what it looks like it does. Pure and local — the daemon is not
@@ -217,6 +228,7 @@ pub fn run() {
             daemon_info,
             detect_environment,
             check_reachability,
+            autoconfig_candidates,
             engine_status,
             engine_start,
             engine_confirm,
