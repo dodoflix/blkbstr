@@ -110,7 +110,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Installer scripts parse
-        run: sh -n packaging/linux/install.sh && sh -n packaging/linux/uninstall.sh
+        run: sh -n packaging/linux/install.sh && sh -n packaging/linux/uninstall.sh && sh -n scripts/dev-daemon.sh
 
       - name: systemd unit parses
         run: |
