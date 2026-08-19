@@ -108,8 +108,13 @@ export type Report = {
 
 /** Seconds, not milliseconds — an unreachable host costs a full timeout. Omit `hosts` for the
  *  built-in list. Nothing is uploaded and the list never leaves the machine. */
-export const checkReachability = (hosts?: string[]) =>
-  invoke<Report>("check_reachability", { hosts });
+export const checkReachability = (hosts?: string[], timeoutMs?: number) =>
+  invoke<Report>("check_reachability", { hosts, timeoutMs });
+
+/** The only port the reachability check speaks on. */
+export const PROBED_TCP_PORT = "443";
+/** Per-candidate timeout during the walk; the baseline check uses the daemon's longer default. */
+export const TRIAL_TIMEOUT_MS = 2000;
 
 /** Ordered most to least likely to be enough. The walk is driven from here: start each one as a
  *  trial, re-check, stop it if it did not help. */

@@ -10,6 +10,7 @@ use blkbstr_core::reachability;
 use blkbstr_core::registry::{self, Warning};
 use blkbstr_core::Config;
 use serde::Serialize;
+use std::time::Duration;
 
 #[derive(Serialize)]
 pub struct DaemonInfo {
@@ -91,7 +92,10 @@ fn detect_environment() -> detect::Environment {
 /// Blocking work on a pool thread rather than the async runtime: an unreachable host costs a full
 /// timeout, and the whole point of this call is to sit through those.
 #[tauri::command]
-async fn check_reachability(hosts: Option<Vec<String>>) -> Result<reachability::Report, String> {
+async fn check_reachability(
+    hosts: Option<Vec<String>>,
+    timeout_ms: Option<u64>,
+) -> Result<reachability::Report, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let hosts = hosts.unwrap_or_else(|| {
             reachability::DEFAULT_HOSTS
@@ -99,7 +103,8 @@ async fn check_reachability(hosts: Option<Vec<String>>) -> Result<reachability::
                 .map(|h| (*h).to_owned())
                 .collect()
         });
-        reachability::check(&hosts, reachability::DEFAULT_TIMEOUT)
+        let timeout = timeout_ms.map_or(reachability::DEFAULT_TIMEOUT, Duration::from_millis);
+        reachability::check(&hosts, timeout)
     })
     .await
     .map_err(|e| format!("the reachability check did not finish: {e}"))

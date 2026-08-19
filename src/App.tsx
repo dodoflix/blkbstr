@@ -74,8 +74,19 @@ export default function App() {
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-/** Long enough for the engine to have the rules up and a connection or two to start using them. */
-const SETTLE_MS = 1500;
+/** The rules are already installed when engineStart returns; this is only for the engine to be
+ *  reading the queue. Measured at well under 250ms, so this is mostly margin. */
+const SETTLE_MS = 600;
+
+/** A candidate that filters ports the check never speaks on cannot change what the check measures,
+ *  so trying it costs a full timeout to learn nothing. */
+function measurable(config: api.Config): boolean {
+  return config.strategies.some(
+    (s) =>
+      s.enabled &&
+      (s.filter.tcp ?? "").split(",").includes(api.PROBED_TCP_PORT),
+  );
+}
 
 type Step = {
   name: string;
@@ -155,7 +166,12 @@ function AutoConfig() {
       }
 
       const tried: Step[] = [];
-      for (const { config, cost } of await api.autoconfigCandidates()) {
+      const all = await api.autoconfigCandidates();
+      const skipped =
+        all.length - all.filter(({ config }) => measurable(config)).length;
+      for (const { config, cost } of all.filter(({ config }) =>
+        measurable(config),
+      )) {
         setSteps((prev) => [
           ...prev,
           {
@@ -184,7 +200,10 @@ function AutoConfig() {
           continue;
         }
         await sleep(SETTLE_MS);
-        const report = await api.checkReachability(blocked);
+        const report = await api.checkReachability(
+          blocked,
+          api.TRIAL_TIMEOUT_MS,
+        );
         // Always stop: every candidate is measured against the same untouched machine, and the
         // one the user settles on is started again by name when they keep it.
         await api.engineStop();
@@ -205,10 +224,14 @@ function AutoConfig() {
         );
       }
 
+      const unmeasured =
+        skipped > 0
+          ? ` ${skipped} that only touch other ports were skipped: the check speaks TLS on ${api.PROBED_TCP_PORT} and nothing else, so it could not tell whether they helped.`
+          : "";
       const helped = rank(tried);
       if (helped.length === 0) {
         setError(
-          "No strategy got anything through. The engine is stopped and the machine is back as it was.",
+          `No strategy got anything through. The engine is stopped and the machine is back as it was.${unmeasured}`,
         );
         return;
       }
@@ -218,7 +241,7 @@ function AutoConfig() {
       setNote(
         best === blocked.length
           ? `${helped.filter((s) => s.worked).length} of ${tried.length} strategies got everything through. The gentlest is picked for you; any of them can be used instead.`
-          : `Nothing got all ${blocked.length} through. The best got ${best}. Pick one or try again later — a censor is not the same from one hour to the next.`,
+          : `Nothing got all ${blocked.length} through. The best got ${best}. Pick one or try again later — a censor is not the same from one hour to the next.${unmeasured}`,
       );
     } catch (e) {
       setError(String(e));
