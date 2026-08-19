@@ -344,6 +344,16 @@ mod render_tests {
     /// read when a candidate turns out not to work against a real engine.
     #[test]
     #[ignore]
+    fn show_the_cost_of_each_candidate() {
+        let mut all = ranked();
+        all.sort_by_key(|c| c.cost);
+        for c in all {
+            println!("{:>3}  {}", c.cost, c.config.name);
+        }
+    }
+
+    #[test]
+    #[ignore]
     fn show_what_each_candidate_renders_to() {
         for config in candidates() {
             println!("# {}\n{}", config.name, parameter_file(&config, &options()));
