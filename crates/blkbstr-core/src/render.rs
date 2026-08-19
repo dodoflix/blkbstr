@@ -22,6 +22,13 @@ pub struct EngineOptions {
     pub pidfile: String,
     /// `--debug=@<path>`; the file the GUI's log viewer tails.
     pub debug_log: Option<String>,
+    /// zapret2's Lua library, in load order. Every desync function lives there — with none of
+    /// these the engine starts and then dies on the first action with
+    /// `desync function 'multisplit' does not exist`.
+    pub lua_init: Vec<String>,
+    /// Render for validation instead of a real run: `--intercept=0` makes the engine load the Lua,
+    /// resolve every action and exit without opening NFQUEUE.
+    pub validate: bool,
 }
 
 impl EngineOptions {
@@ -31,6 +38,8 @@ impl EngineOptions {
             queue_num: 200,
             pidfile: String::new(),
             debug_log: None,
+            lua_init: Vec::new(),
+            validate: false,
         }
     }
 }
@@ -39,6 +48,9 @@ impl EngineOptions {
 pub fn parameter_file(config: &Config, engine: &EngineOptions) -> String {
     let mut lines: Vec<String> = Vec::new();
 
+    if engine.validate {
+        lines.push("--intercept=0".into());
+    }
     match engine.platform {
         Platform::Linux => lines.push(format!("--qnum={}", engine.queue_num)),
         // winws2 builds its own WinDivert filter from the profile filters; dvtws2 takes a divert
@@ -50,6 +62,9 @@ pub fn parameter_file(config: &Config, engine: &EngineOptions) -> String {
     }
     if let Some(log) = &engine.debug_log {
         lines.push(format!("--debug=@{log}"));
+    }
+    for script in &engine.lua_init {
+        lines.push(format!("--lua-init=@{script}"));
     }
 
     for strategy in config.strategies.iter().filter(|s| s.enabled) {
@@ -108,14 +123,13 @@ fn action_lines(action: &Action) -> Vec<String> {
     lines
 }
 
-/// Command-line arguments for a `--dry-run` validation pass: parameters are checked, Lua is not
-/// executed and NFQUEUE is never opened, so this is safe to run before touching the firewall.
-pub fn dry_run_args(parameter_file_path: &str) -> Vec<String> {
-    vec![format!("@{parameter_file_path}"), "--dry-run".into()]
-}
-
-/// Arguments for the real run. `--daemon` is deliberately absent: the daemon supervises the engine
-/// as a child process, and a process that forks away from us cannot be supervised.
+/// Arguments for any invocation. `@<file>` has to be the only argument — nfqws2 documents it as
+/// "must be the only argument. other options are ignored", and it means it: a `--dry-run` appended
+/// after it is silently dropped and the engine starts for real. Anything that would be a flag goes
+/// inside the file, which is what [`EngineOptions::validate`] is for.
+///
+/// `--daemon` is deliberately absent: the daemon supervises the engine as a child process, and a
+/// process that forks away from us cannot be supervised.
 pub fn run_args(parameter_file_path: &str) -> Vec<String> {
     vec![format!("@{parameter_file_path}")]
 }
@@ -154,6 +168,8 @@ mod tests {
             queue_num: 200,
             pidfile: "/run/blkbstr/engine.pid".into(),
             debug_log: Some("/var/log/blkbstr/engine.log".into()),
+            lua_init: vec!["/opt/zapret2/lua/zapret-lib.lua".into()],
+            validate: false,
         }
     }
 
@@ -167,6 +183,7 @@ mod tests {
                 "--qnum=200",
                 "--pidfile=/run/blkbstr/engine.pid",
                 "--debug=@/var/log/blkbstr/engine.log",
+                "--lua-init=@/opt/zapret2/lua/zapret-lib.lua",
                 "--new=https",
                 "--filter-tcp=443",
                 "--filter-l7=tls",
@@ -176,6 +193,21 @@ mod tests {
                 "--lua-desync=multidisorder:strategy=2",
             ]
         );
+    }
+
+    /// nfqws2 ignores anything after `@<file>`, so a validation run that put `--intercept=0` in
+    /// argv would start the engine for real instead of checking it.
+    #[test]
+    fn validation_goes_in_the_file_not_in_argv() {
+        let out = parameter_file(
+            &starter_config("t"),
+            &EngineOptions {
+                validate: true,
+                ..engine()
+            },
+        );
+        assert_eq!(out.lines().next(), Some("--intercept=0"));
+        assert_eq!(run_args("/run/blkbstr/nfqws2.conf").len(), 1);
     }
 
     #[test]

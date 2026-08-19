@@ -165,6 +165,8 @@ mod render_tests {
             queue_num: 200,
             pidfile: "/run/blkbstr/engine.pid".into(),
             debug_log: None,
+            lua_init: Vec::new(),
+            validate: false,
         }
     }
 

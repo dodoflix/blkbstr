@@ -216,16 +216,24 @@ impl Engine {
             .with_context(|| format!("creating {}", runtime.display()))?;
 
         let params_path = runtime.join("nfqws2.conf").display().to_string();
-        let options = EngineOptions {
+        let mut options = EngineOptions {
             platform: self.platform,
             queue_num: 200,
             pidfile: runtime.join("engine.pid").display().to_string(),
             debug_log: Some(format!("{}/engine.log", paths::log_dir().display())),
+            lua_init: lua_init()?,
+            validate: false,
         };
+
+        options.validate = true;
+        let check_path = runtime.join("nfqws2-check.conf").display().to_string();
+        std::fs::write(&check_path, render::parameter_file(config, &options))
+            .with_context(|| format!("writing {check_path}"))?;
+        self.validate(&check_path)?;
+
+        options.validate = false;
         std::fs::write(&params_path, render::parameter_file(config, &options))
             .with_context(|| format!("writing {params_path}"))?;
-
-        self.dry_run(&params_path)?;
 
         // Rules last, so a config the engine rejects never reaches the network stack.
         let spec = intercept_spec(config, options.queue_num)?;
@@ -266,13 +274,14 @@ impl Engine {
         Ok(())
     }
 
-    /// `--dry-run` checks the options and that referenced files exist, without opening NFQUEUE.
-    /// It does not validate the Lua, so a config can pass here and still fail at runtime.
-    fn dry_run(&self, params_path: &str) -> Result<()> {
+    /// Runs the config with `--intercept=0`: options are checked, the Lua is loaded and every
+    /// action is resolved, then the engine exits without opening NFQUEUE. `--dry-run` is the
+    /// weaker check — it returns 0 for an action no Lua defines — so this is used instead.
+    fn validate(&self, params_path: &str) -> Result<()> {
         let out = Command::new(&self.binary)
-            .args(render::dry_run_args(params_path))
+            .args(render::run_args(params_path))
             .output()
-            .with_context(|| format!("running {} --dry-run", self.binary.display()))?;
+            .with_context(|| format!("checking the config with {}", self.binary.display()))?;
         if !out.status.success() {
             bail!(
                 "the engine rejected this config: {}",
@@ -367,6 +376,14 @@ fn collect_ports<'a>(
     ports.sort_unstable();
     ports.dedup();
     ports.join(",")
+}
+
+fn lua_init() -> Result<Vec<String>> {
+    let dir = detect::locate_lua_dir().context(
+        "zapret2's Lua scripts were not found. They ship with the engine — look for \
+         zapret-lib.lua under /opt/zapret2/lua — and without them no desync action exists",
+    )?;
+    Ok(detect::lua_init_scripts(&dir))
 }
 
 fn locate(binary: &str) -> Result<PathBuf> {
