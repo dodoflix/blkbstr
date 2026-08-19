@@ -12,17 +12,57 @@ use crate::config::{Action, Config, Filter, Strategy};
 
 /// Ordered most to least likely to be enough. TLS first: SNI inspection is the common case, and a
 /// blocked site that loads once the ClientHello is broken up needs nothing else.
+///
+/// The split positions come from zapret2's own `blockcheck2`, which sweeps
+/// `2 1 sniext+1 sniext+4 host+1 midsld 1,midsld ...` — a strategy is only as good as where it
+/// cuts, and `multisplit` with no `pos` splits after one byte, which almost nothing falls for.
 pub fn candidates() -> Vec<Config> {
     vec![
         tls(
-            "multisplit",
-            "Split the TLS hello so the hostname spans two packets",
-            vec![Action::new("multisplit").with("strategy", "1")],
+            "multisplit-midsld",
+            "Split the TLS hello at the domain name, and again at the start",
+            vec![split("multisplit", "1,midsld")],
         ),
         tls(
-            "multidisorder",
-            "Split the hello and send the pieces out of order",
-            vec![Action::new("multidisorder").with("strategy", "1")],
+            "multisplit-sniext",
+            "Split the TLS hello inside the server name extension",
+            vec![split("multisplit", "sniext+1")],
+        ),
+        tls(
+            "multisplit-host",
+            "Split the TLS hello just after the hostname begins",
+            vec![split("multisplit", "host+1")],
+        ),
+        tls(
+            "multidisorder-midsld",
+            "Split at the domain name and send the pieces out of order",
+            vec![split("multidisorder", "1,midsld")],
+        ),
+        tls(
+            "multidisorder-sniext",
+            "Split inside the server name extension and reorder the pieces",
+            vec![split("multidisorder", "sniext+1")],
+        ),
+        tls(
+            "multisplit-seqovl",
+            "Split at the domain name, with the first piece overlapping the one before it",
+            vec![split("multisplit", "1,midsld").with("seqovl", "1")],
+        ),
+        tls(
+            "multidisorder-scatter",
+            "Cut the hello in seven places and send them out of order",
+            vec![split(
+                "multidisorder",
+                "1,sniext+1,host+1,midsld-2,midsld,midsld+2,endhost-1",
+            )],
+        ),
+        tls(
+            "wssize-multisplit",
+            "Shrink the advertised window so the hello arrives in pieces, then split it",
+            vec![
+                Action::new("wssize").with("wsize", "1").with("scale", "6"),
+                split("multisplit", "1,midsld"),
+            ],
         ),
         tls(
             "fake-multidisorder",
@@ -30,40 +70,55 @@ pub fn candidates() -> Vec<Config> {
             vec![
                 Action::new("fake")
                     .with("blob", "fake_default_tls")
-                    .with("badsum", "")
-                    .with("strategy", "1"),
-                Action::new("multidisorder").with("strategy", "2"),
+                    .with("badsum", ""),
+                split("multidisorder", "1,midsld"),
             ],
         ),
         tls(
             "fakedsplit",
-            "Split the hello with a decoy in the gap",
-            vec![Action::new("fakedsplit").with("strategy", "1")],
+            "Split at the domain name with a bad-checksum decoy in the gap",
+            vec![split("fakedsplit", "1,midsld").with("badsum", "")],
         ),
         tls(
             "fakeddisorder",
-            "Split the hello with a decoy, out of order",
-            vec![Action::new("fakeddisorder").with("strategy", "1")],
+            "Split at the domain name with a decoy, out of order",
+            vec![split("fakeddisorder", "1,midsld").with("badsum", "")],
         ),
         tls(
-            "wssize",
-            "Shrink the advertised window so the hello arrives in pieces",
-            vec![Action::new("wssize").with("strategy", "1")],
+            "multisplit-2",
+            "Split the TLS hello after its first byte",
+            vec![split("multisplit", "2")],
         ),
         tls(
             "oob",
             "Send an out-of-band byte the inspector reads and the server ignores",
-            vec![Action::new("oob").with("strategy", "1")],
+            vec![Action::new("oob")],
+        ),
+        http(
+            "http-multisplit",
+            "Split the request after the method and again at the domain name",
+            vec![split("multisplit", "method+2,midsld")],
+        ),
+        http(
+            "http-multidisorder",
+            "Split the request and send the pieces out of order",
+            vec![split("multidisorder", "method+2,midsld")],
         ),
         http(
             "http-hostcase",
             "Change the case of the Host header, which some inspectors match literally",
             vec![
-                Action::new("http_hostcase").with("strategy", "1"),
-                Action::new("multisplit").with("strategy", "2"),
+                Action::new("http_hostcase"),
+                split("multisplit", "method+2,midsld"),
             ],
         ),
     ]
+}
+
+/// `pos` is the argument that decides where a split lands; every splitting function takes it and
+/// none of them do anything useful on their default of `2`.
+fn split(function: &str, pos: &str) -> Action {
+    Action::new(function).with("pos", pos)
 }
 
 fn tls(name: &str, notes: &str, actions: Vec<Action>) -> Config {

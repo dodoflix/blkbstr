@@ -147,9 +147,9 @@ pub fn starter_config(name: &str) -> Config {
     https.actions = vec![
         Action::new("fake")
             .with("blob", "fake_default_tls")
-            .with("badsum", "")
-            .with("strategy", "1"),
-        Action::new("multidisorder").with("strategy", "2"),
+            .with("badsum", ""),
+        // `pos` is not optional in practice: without it multidisorder splits after one byte.
+        Action::new("multidisorder").with("pos", "1,midsld"),
     ];
     for action in &mut https.actions {
         action.payload = vec!["tls_client_hello".into()];
@@ -188,9 +188,9 @@ mod tests {
                 "--filter-tcp=443",
                 "--filter-l7=tls",
                 "--payload=tls_client_hello",
-                "--lua-desync=fake:badsum:blob=fake_default_tls:strategy=1",
+                "--lua-desync=fake:badsum:blob=fake_default_tls",
                 "--payload=tls_client_hello",
-                "--lua-desync=multidisorder:strategy=2",
+                "--lua-desync=multidisorder:pos=1,midsld",
             ]
         );
     }
