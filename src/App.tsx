@@ -97,7 +97,51 @@ type Step = {
   unblocked: number;
   cost: number;
   config: api.Config;
+  /** Filled in by the measurement pass, which only runs for candidates that helped. */
+  impact?: Impact;
 };
+
+/** What a strategy costs the rest of the connection, measured rather than guessed. */
+type Impact = {
+  /** Median TLS handshake time to the hosts that already worked. */
+  latencyMs: number;
+  /** How much slower than with no strategy running. */
+  deltaMs: number;
+  /** Hosts that worked before this strategy and stopped once it was applied. */
+  broke: string[];
+};
+
+const median = (xs: number[]) =>
+  xs.length ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] : 0;
+
+/** Handshake time across hosts that already worked, and anything that stopped working.
+ *
+ *  Three rounds: one handshake is noisy enough to invent a difference that is not there. A host
+ *  counts as broken only if it failed every round, so a single flap does not condemn a strategy. */
+async function measure(hosts: string[]): Promise<Omit<Impact, "deltaMs">> {
+  const rounds: number[] = [];
+  const failures = new Map<string, number>();
+  const ROUNDS = 3;
+  for (let i = 0; i < ROUNDS; i++) {
+    const report = await api.checkReachability(hosts, api.TRIAL_TIMEOUT_MS);
+    rounds.push(
+      median(
+        report.sites
+          .filter((site) => site.verdict === "fine")
+          .map((site) => site.elapsed_ms),
+      ),
+    );
+    for (const site of report.sites) {
+      if (site.verdict !== "fine") {
+        failures.set(site.host, (failures.get(site.host) ?? 0) + 1);
+      }
+    }
+  }
+  return {
+    latencyMs: median(rounds),
+    broke: [...failures].filter(([, n]) => n === ROUNDS).map(([host]) => host),
+  };
+}
 
 /** Best first: more sites through wins, then the strategy that disturbs traffic least, then the
  *  earlier one, which is the hand-ranked order.
@@ -107,7 +151,14 @@ type Step = {
 function rank(steps: Step[]): Step[] {
   return steps
     .filter((step) => step.unblocked > 0)
-    .sort((a, b) => b.unblocked - a.unblocked || a.cost - b.cost);
+    .sort(
+      (a, b) =>
+        b.unblocked - a.unblocked ||
+        // Breaking a site that used to work is worse than any amount of slowness.
+        (a.impact?.broke.length ?? 0) - (b.impact?.broke.length ?? 0) ||
+        (a.impact?.deltaMs ?? 0) - (b.impact?.deltaMs ?? 0) ||
+        a.cost - b.cost,
+    );
 }
 
 /** Tries every candidate and reports all of them that worked.
@@ -128,6 +179,7 @@ function AutoConfig() {
   const [error, setError] = useState<string>();
   const [blockedCount, setBlockedCount] = useState(0);
   const [progress, setProgress] = useState<[number, number]>([0, 0]);
+  const [measuring, setMeasuring] = useState(false);
   // A ref, not state: the walk reads it inside a loop that never re-renders.
   const cancelled = useRef(false);
 
@@ -146,6 +198,7 @@ function AutoConfig() {
   const run = async () => {
     cancelled.current = false;
     setRunning(true);
+    setMeasuring(false);
     setProgress([0, 0]);
     setSteps([]);
     setWinner(undefined);
@@ -162,6 +215,12 @@ function AutoConfig() {
       const blocked = baseline.sites
         .filter((site) => site.verdict !== "fine")
         .map((site) => site.host);
+      // The hosts a strategy is not supposed to change. They are what "did this make anything
+      // worse" is measured against, so the control host is in there even if nothing else is.
+      const unaffected = baseline.sites
+        .filter((site) => site.verdict === "fine")
+        .map((site) => site.host);
+      unaffected.push(baseline.control.host);
       setBlockedCount(blocked.length);
       if (blocked.length === 0) {
         setNote(
@@ -234,6 +293,39 @@ function AutoConfig() {
         skipped > 0
           ? ` ${skipped} that only touch other ports were skipped: the check speaks TLS on ${api.PROBED_TCP_PORT} and nothing else, so it could not tell whether they helped.`
           : "";
+      // Only what helped gets measured: it is three more checks per candidate, and a strategy that
+      // did not get anything through is not a choice however fast it is.
+      const shortlist = rank(tried);
+      if (shortlist.length > 0 && !cancelled.current) {
+        setMeasuring(true);
+        const before = await measure(unaffected);
+        for (const [i, step] of shortlist.entries()) {
+          if (cancelled.current) break;
+          setProgress([i + 1, shortlist.length]);
+          try {
+            await api.engineStart(step.config, true);
+            await sleep(SETTLE_MS);
+            const after = await measure(unaffected);
+            step.impact = {
+              ...after,
+              deltaMs: after.latencyMs - before.latencyMs,
+            };
+          } catch {
+            // A candidate that started once and will not start again is not one to offer.
+            step.impact = undefined;
+          } finally {
+            await api.engineStop();
+          }
+        }
+        setSteps((prev) =>
+          prev.map((step) => {
+            const measured = shortlist.find((s) => s.name === step.name);
+            return measured ? { ...step, impact: measured.impact } : step;
+          }),
+        );
+        setMeasuring(false);
+      }
+
       const stopped = cancelled.current
         ? ` Stopped after ${tried.length} of ${usable.length}.`
         : "";
@@ -255,6 +347,7 @@ function AutoConfig() {
     } catch (e) {
       setError(String(e));
     } finally {
+      setMeasuring(false);
       setRunning(false);
     }
   };
@@ -294,15 +387,16 @@ function AutoConfig() {
                 Stop
               </Button>
               <Text size="2">
+                {measuring ? "measuring " : ""}
                 {progress[0]} of {progress[1]}
               </Text>
             </>
           )}
           <Text size="1" color="gray">
-            Tries every strategy for a couple of seconds each, then lists the
-            ones that got the blocked sites through, gentlest first. The likely
-            ones come early, so stopping partway still gives an answer. Nothing
-            is kept until you say so.
+            Tries every strategy for a couple of seconds each, then measures
+            what the ones that worked cost the rest of your connection. The
+            likely ones come early, so stopping partway still gives an answer.
+            Nothing is kept until you say so.
           </Text>
         </Flex>
 
@@ -341,8 +435,16 @@ function AutoConfig() {
                           {step.unblocked} of {blockedCount}
                         </Badge>
                       )}
+                      {step.impact && step.impact.broke.length > 0 && (
+                        <Badge color="red">
+                          broke {step.impact.broke.join(", ")}
+                        </Badge>
+                      )}
                       <Text size="1" color="gray">
-                        disturbance {step.cost} · {step.notes}
+                        {step.impact
+                          ? impactLabel(step.impact)
+                          : `disturbance ${step.cost}`}{" "}
+                        · {step.notes}
                       </Text>
                     </Flex>
                   </RadioGroup.Item>
@@ -395,6 +497,17 @@ function AutoConfig() {
       </Flex>
     </Card>
   );
+}
+
+/** The measured cost of a strategy in one phrase. A handshake difference under 10ms is inside the
+ *  noise of three rounds, so it is reported as no difference rather than as a small one. */
+function impactLabel(impact: Impact): string {
+  const { latencyMs, deltaMs, broke } = impact;
+  const speed =
+    Math.abs(deltaMs) < 10
+      ? `${latencyMs}ms handshake, no slower`
+      : `${latencyMs}ms handshake, ${deltaMs > 0 ? "+" : ""}${deltaMs}ms`;
+  return broke.length > 0 ? speed : `${speed}, nothing else broke`;
 }
 
 /** What each verdict means in one phrase, and how alarmed to look about it. */
