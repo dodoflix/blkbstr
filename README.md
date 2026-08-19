@@ -84,7 +84,7 @@ there. To go further, run the privileged daemon from `target/debug` instead:
 
 ```sh
 npm run dev:daemon              # builds, stops the service, runs it in the foreground
-npm run watch:daemon            # the same, rebuilt and restarted on change (needs cargo-watch)
+npm run watch:daemon            # the same, rebuilt and restarted whenever a .rs file changes
 ```
 
 It takes over the installed service's socket and hands it to your own primary group, so the GUI

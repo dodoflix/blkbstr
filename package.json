@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "dev:daemon": "scripts/dev-daemon.sh",
-    "watch:daemon": "cargo watch -w crates -s scripts/dev-daemon.sh"
+    "watch:daemon": "scripts/dev-daemon.sh --watch"
   },
   "dependencies": {
     "@radix-ui/themes": "^3.3.0",
