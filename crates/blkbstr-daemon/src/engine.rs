@@ -1,7 +1,7 @@
 //! Runs and supervises the zapret2 packet manipulator.
 //!
 //! Order matters and is the same on every path: validate the config, write the parameter file,
-//! ask the engine to check it with `--dry-run`, install the firewall rules, then start the engine.
+//! ask the engine to check it with `--intercept=0`, install the firewall rules, then start it.
 //! Rules go in last because rules pointing at a queue nothing reads is the state that breaks a
 //! user's network, and they come out first on the way down.
 
@@ -92,6 +92,7 @@ impl Engine {
     /// fatal: a daemon that refuses to start because a saved config went stale is worse than one
     /// that comes up idle and says why.
     pub fn restore(&mut self) {
+        kill_orphan();
         let Some(config) = load_saved() else {
             return;
         };
@@ -309,7 +310,56 @@ impl Engine {
         }
         rules
     }
+
+    /// Kills the engine and removes the rules on the way out of the process. Unlike [`stop`] it
+    /// leaves the saved config alone — this is the machine going down, not a decision to stay
+    /// stopped — and it never fails, because there is nobody left to report a failure to.
+    ///
+    /// Without this the engine outlives a killed daemon, keeps NFQUEUE bound, and every later
+    /// start dies with `nfq_create_queue(): Operation not permitted`.
+    pub fn shutdown(&mut self) {
+        let _ = self.firewall.teardown();
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        self.active = None;
+    }
 }
+
+/// Kills an engine left behind by a daemon that died without tearing it down. It still holds
+/// NFQUEUE, so without this every start fails with `nfq_create_queue(): Operation not permitted`
+/// until someone finds the process by hand.
+///
+/// Found by scanning `/proc` for our own parameter file rather than by reading the pidfile:
+/// nfqws2 only writes that under `--daemon`, and the daemon supervises the engine as a child
+/// instead, so the file is truncated to zero bytes and never filled in.
+#[cfg(target_os = "linux")]
+fn kill_orphan() {
+    let params = format!("@{}", paths::runtime_dir().join("nfqws2.conf").display());
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
+            continue;
+        };
+        let Ok(cmdline) = std::fs::read(entry.path().join("cmdline")) else {
+            continue;
+        };
+        let args: Vec<_> = cmdline.split(|b| *b == 0).collect();
+        if args.contains(&params.as_bytes()) {
+            tracing::warn!(pid, "killing an engine left behind by a previous daemon");
+            let _ = Command::new("kill")
+                .arg("-TERM")
+                .arg(pid.to_string())
+                .status();
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn kill_orphan() {}
 
 fn saved_path() -> PathBuf {
     paths::state_dir().join("active.json")
