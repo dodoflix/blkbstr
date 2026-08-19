@@ -10,150 +10,260 @@
 
 use crate::config::{Action, Config, Filter, Strategy};
 
-/// Ordered most to least likely to be enough. TLS first: SNI inspection is the common case, and a
-/// blocked site that loads once the ClientHello is broken up needs nothing else.
+/// Split positions, in the order zapret2's own `blockcheck2` sweeps them. A strategy is only as
+/// good as where it cuts, and `multisplit` with no `pos` splits after one byte, which almost
+/// nothing falls for.
+const TLS_POSITIONS: &[&str] = &[
+    "1,midsld",
+    "midsld",
+    "sniext+1",
+    "sniext+4",
+    "host+1",
+    "2",
+    "1",
+    "1,midsld,1220",
+    "1,sniext+1,host+1,midsld-2,midsld,midsld+2,endhost-1",
+];
+
+/// The positions worth combining with something else. Sweeping every fooling against all nine
+/// would be several hundred candidates, and blockcheck2 only reaches that many because it prunes
+/// as it goes — which this list cannot do, since the user chooses from the finished results.
+const TLS_KEY_POSITIONS: &[&str] = &["1,midsld", "midsld", "sniext+1"];
+
+const HTTP_POSITIONS: &[&str] = &["method+2,midsld", "midsld", "method+2"];
+
+/// `FOOLINGS46_TCP` from blockcheck2's `def.inc`: ways to build a packet the DPI accepts and the
+/// server throws away. Each is `(name, args)`, where args are appended to the action.
+const FOOLINGS: &[(&str, &[(&str, &str)])] = &[
+    ("md5", &[("tcp_md5", "")]),
+    ("badsum", &[("badsum", "")]),
+    ("seqback", &[("tcp_seq", "-3000")]),
+    ("seqfwd", &[("tcp_seq", "1000000")]),
+    ("ackback", &[("tcp_ack", "-66000"), ("tcp_ts_up", "")]),
+    ("tsback", &[("tcp_ts", "-1000")]),
+    ("noack", &[("tcp_flags_unset", "ACK")]),
+    ("syn", &[("tcp_flags_set", "SYN")]),
+];
+
+/// Ordered most to least likely to be enough, and cheapest first within each family: the walk is
+/// stopped by the user, so what comes early is what a short run gets to try.
 ///
-/// The split positions come from zapret2's own `blockcheck2`, which sweeps
-/// `2 1 sniext+1 sniext+4 host+1 midsld 1,midsld ...` — a strategy is only as good as where it
-/// cuts, and `multisplit` with no `pos` splits after one byte, which almost nothing falls for.
+/// This is blockcheck2's sweep, narrowed. Its own search runs to several hundred combinations
+/// because it prunes after each stage ("do not test fakedsplit if multisplit works"); this list
+/// cannot prune, because every result is reported and the choice is the user's.
 pub fn candidates() -> Vec<Config> {
-    vec![
-        tls(
-            "multisplit-midsld",
-            "Split the TLS hello at the domain name, and again at the start",
-            vec![split("multisplit", "1,midsld")],
-        ),
-        tls(
-            "multisplit-sniext",
-            "Split the TLS hello inside the server name extension",
-            vec![split("multisplit", "sniext+1")],
-        ),
-        tls(
-            "multisplit-host",
-            "Split the TLS hello just after the hostname begins",
-            vec![split("multisplit", "host+1")],
-        ),
-        tls(
-            "multidisorder-midsld",
-            "Split at the domain name and send the pieces out of order",
-            vec![split("multidisorder", "1,midsld")],
-        ),
-        tls(
-            "multidisorder-sniext",
-            "Split inside the server name extension and reorder the pieces",
-            vec![split("multidisorder", "sniext+1")],
-        ),
-        tls(
-            "multisplit-seqovl",
-            "Split at the domain name, with the first piece overlapping the one before it",
-            vec![split("multisplit", "1,midsld").with("seqovl", "1")],
-        ),
-        tls(
-            "multidisorder-scatter",
-            "Cut the hello in seven places and send them out of order",
-            vec![split(
-                "multidisorder",
-                "1,sniext+1,host+1,midsld-2,midsld,midsld+2,endhost-1",
-            )],
-        ),
-        tls(
-            "wssize-multisplit",
-            "Shrink the advertised window so the hello arrives in pieces, then split it",
+    let mut out = Vec::new();
+
+    // Splitting alone. Beats a DPI that reads one packet and does not reassemble.
+    for function in ["multisplit", "multidisorder"] {
+        for pos in TLS_POSITIONS {
+            out.push(tls(
+                &name(&[function, pos]),
+                &format!("Split the TLS hello at {}", describe(pos)),
+                vec![split(function, pos)],
+            ));
+        }
+    }
+
+    // Overlapping the first segment with data the DPI has already passed on.
+    for pos in TLS_KEY_POSITIONS {
+        out.push(tls(
+            &name(&["multisplit", "seqovl", pos]),
+            &format!(
+                "Split at {}, overlapping the segment before it",
+                describe(pos)
+            ),
+            vec![split("multisplit", pos).with("seqovl", "1")],
+        ));
+    }
+
+    // A decoy in the gap, discarded somewhere between here and the server. This is the family that
+    // beats a DPI which reassembles the stream, so it gets the full fooling sweep.
+    for function in ["fakedsplit", "fakeddisorder"] {
+        for (fooling, args) in FOOLINGS {
+            for pos in TLS_KEY_POSITIONS {
+                out.push(tls(
+                    &name(&[function, fooling, pos]),
+                    &format!(
+                        "Split at {} with a decoy the server discards",
+                        describe(pos)
+                    ),
+                    vec![with_args(split(function, pos), args)],
+                ));
+            }
+        }
+    }
+
+    // A whole decoy hello before the real one, then a split.
+    for (fooling, args) in FOOLINGS {
+        out.push(tls(
+            &name(&["fake", fooling]),
+            "Send a whole decoy hello the server discards, then split the real one",
             vec![
-                Action::new("wssize").with("wsize", "1").with("scale", "6"),
-                split("multisplit", "1,midsld"),
+                with_args(Action::new("fake").with("blob", "fake_default_tls"), args),
+                split("multidisorder", TLS_KEY_POSITIONS[0]),
             ],
-        ),
-        tls(
-            "fake-multidisorder",
-            "Send a decoy hello with a bad checksum, then split and reorder the real one",
+        ));
+    }
+
+    // The same decoy, expiring before it reaches the server. autottl finds the hop count itself;
+    // the fixed values are for when it guesses wrong.
+    for delta in 1..=5 {
+        out.push(tls(
+            &name(&["fake", "autottl", &delta.to_string()]),
+            "Send a decoy that expires before the server sees it, then split the real hello",
             vec![
                 Action::new("fake")
                     .with("blob", "fake_default_tls")
-                    .with("badsum", ""),
-                split("multidisorder", "1,midsld"),
-            ],
-        ),
-        tls(
-            "fake-autottl",
-            "Send a decoy that expires before the server sees it, then split and reorder the real one",
-            vec![
-                Action::new("fake")
-                    .with("blob", "fake_default_tls")
-                    .with("ip4_autottl", "-1,3-20")
+                    .with("ip4_autottl", format!("-{delta},3-20"))
                     .with("repeats", "2"),
-                split("multidisorder", "1,midsld"),
+                split("multidisorder", TLS_KEY_POSITIONS[0]),
             ],
-        ),
-        tls(
-            "fake-autottl-far",
-            "The same decoy, aimed a little further away",
+        ));
+    }
+    for ttl in 1..=12 {
+        out.push(tls(
+            &name(&["fake", "ttl", &ttl.to_string()]),
+            &format!("Send a decoy that expires {ttl} hops away, then split the real hello"),
             vec![
                 Action::new("fake")
                     .with("blob", "fake_default_tls")
-                    .with("ip4_autottl", "-3,3-20")
+                    .with("ip4_ttl", ttl.to_string())
                     .with("repeats", "2"),
-                split("multidisorder", "1,midsld"),
+                split("multidisorder", TLS_KEY_POSITIONS[0]),
             ],
-        ),
-        tls(
-            "fakedsplit-md5",
-            "Split with a decoy carrying a bogus MD5 signature the server discards",
-            vec![split("fakedsplit", "1,midsld").with("tcp_md5", "")],
-        ),
+        ));
+    }
+
+    // Making the kernel do the splitting, for a DPI that only reads the first segment.
+    for function in ["multisplit", "multidisorder"] {
+        for pos in TLS_KEY_POSITIONS {
+            out.push(tls(
+                &name(["wssize", function, pos].as_slice()),
+                &format!(
+                    "Shrink the window so the hello arrives in pieces, split at {}",
+                    describe(pos)
+                ),
+                vec![
+                    Action::new("wssize").with("wsize", "1").with("scale", "6"),
+                    split(function, pos),
+                ],
+            ));
+        }
+    }
+
+    out.extend([
         tls(
             "syndata",
             "Put a decoy hello in the SYN packet, before the real one",
             vec![
                 Action::new("syndata").with("blob", "fake_default_tls"),
-                split("multisplit", "1,midsld"),
+                split("multisplit", TLS_KEY_POSITIONS[0]),
             ],
         ),
         tls(
-            "fakedsplit",
-            "Split at the domain name with a bad-checksum decoy in the gap",
-            vec![split("fakedsplit", "1,midsld").with("badsum", "")],
+            "syndata-http",
+            "Put a decoy HTTP request in the SYN packet, before the real hello",
+            vec![
+                Action::new("syndata").with("blob", "fake_default_http"),
+                split("multisplit", TLS_KEY_POSITIONS[0]),
+            ],
         ),
         tls(
-            "fakeddisorder",
-            "Split at the domain name with a decoy, out of order",
-            vec![split("fakeddisorder", "1,midsld").with("badsum", "")],
+            "tcpseg-seqovl",
+            "Re-segment the hello with the first piece overlapping the one before it",
+            vec![Action::new("tcpseg")
+                .with("pos", "0,-1")
+                .with("seqovl", "1")],
         ),
         tls(
-            "multisplit-2",
-            "Split the TLS hello after its first byte",
-            vec![split("multisplit", "2")],
+            "tcpseg-midsld",
+            "Re-segment the hello at the domain name",
+            vec![Action::new("tcpseg")
+                .with("pos", "0,midsld")
+                .with("ip_id", "rnd")],
         ),
         tls(
             "oob",
             "Send an out-of-band byte the inspector reads and the server ignores",
             vec![Action::new("oob")],
         ),
-        http(
-            "http-multisplit",
-            "Split the request after the method and again at the domain name",
-            vec![split("multisplit", "method+2,midsld")],
+        tls(
+            "oob-urp",
+            "The same out-of-band byte, with the urgent pointer moved",
+            vec![Action::new("oob").with("urp", "1")],
         ),
-        http(
-            "http-multidisorder",
-            "Split the request and send the pieces out of order",
-            vec![split("multidisorder", "method+2,midsld")],
-        ),
-        http(
-            "http-hostcase",
-            "Change the case of the Host header, which some inspectors match literally",
-            vec![
-                Action::new("http_hostcase"),
-                split("multisplit", "method+2,midsld"),
-            ],
-        ),
-    ]
+    ]);
+
+    // HTTP. The reachability check speaks TLS only, so the walk cannot currently measure these —
+    // they are here so a config editor and an eventual HTTP probe have something to start from.
+    for function in ["multisplit", "multidisorder"] {
+        for pos in HTTP_POSITIONS {
+            out.push(http(
+                &name(&["http", function, pos]),
+                &format!("Split the request at {}", describe(pos)),
+                vec![split(function, pos)],
+            ));
+        }
+    }
+    out.push(http(
+        "http-hostcase",
+        "Change the case of the Host header, which some inspectors match literally",
+        vec![
+            Action::new("http_hostcase"),
+            split("multisplit", HTTP_POSITIONS[0]),
+        ],
+    ));
+
+    out
 }
 
 /// `pos` is the argument that decides where a split lands; every splitting function takes it and
 /// none of them do anything useful on their default of `2`.
 fn split(function: &str, pos: &str) -> Action {
     Action::new(function).with("pos", pos)
+}
+
+fn with_args(mut action: Action, args: &[(&str, &str)]) -> Action {
+    for (key, value) in args {
+        action = action.with(*key, *value);
+    }
+    action
+}
+
+/// A config name is a file stem and an nfqws2 profile name, so a position like
+/// `1,sniext+1,midsld-2` cannot go in raw.
+fn name(parts: &[&str]) -> String {
+    let joined = parts.join("-");
+    let mut out = String::with_capacity(joined.len());
+    let mut last_dash = true;
+    for c in joined.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c);
+            last_dash = false;
+        } else if !last_dash {
+            out.push('-');
+            last_dash = true;
+        }
+    }
+    out.trim_end_matches('-').to_owned()
+}
+
+/// Turns a position marker into something a user can read. Anything unrecognised is shown as is,
+/// which is better than pretending to explain it.
+fn describe(pos: &str) -> String {
+    match pos {
+        "1,midsld" => "the domain name, and again at the start".into(),
+        "midsld" => "the domain name".into(),
+        "sniext+1" => "the start of the server name extension".into(),
+        "sniext+4" => "just inside the server name extension".into(),
+        "host+1" => "the first byte of the hostname".into(),
+        "method+2,midsld" => "the method, and again at the domain name".into(),
+        "method+2" => "the method".into(),
+        "2" => "its second byte".into(),
+        "1" => "its first byte".into(),
+        other => other.to_string(),
+    }
 }
 
 /// A candidate and what it costs to run. The cost only ever orders strategies that already work,
@@ -307,9 +417,9 @@ mod tests {
                 .unwrap_or_else(|| panic!("no candidate named {name}"));
             cost(&config)
         };
-        assert!(by_name("multisplit-midsld") < by_name("fake-multidisorder"));
-        assert!(by_name("fake-multidisorder") < by_name("wssize-multisplit"));
-        assert!(by_name("multisplit-2") < by_name("multidisorder-scatter"));
+        assert!(by_name("multisplit-midsld") < by_name("fake-md5"));
+        assert!(by_name("fake-md5") < by_name("wssize-multisplit-midsld"));
+        assert!(by_name("multisplit-2") < by_name("multisplit-1-midsld"));
         assert_eq!(ranked().len(), candidates().len());
     }
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Badge,
   Button,
@@ -127,6 +127,9 @@ function AutoConfig() {
   const [note, setNote] = useState<string>();
   const [error, setError] = useState<string>();
   const [blockedCount, setBlockedCount] = useState(0);
+  const [progress, setProgress] = useState<[number, number]>([0, 0]);
+  // A ref, not state: the walk reads it inside a loop that never re-renders.
+  const cancelled = useRef(false);
 
   const finish = (
     name: string,
@@ -141,7 +144,9 @@ function AutoConfig() {
     );
 
   const run = async () => {
+    cancelled.current = false;
     setRunning(true);
+    setProgress([0, 0]);
     setSteps([]);
     setWinner(undefined);
     setNote(undefined);
@@ -167,11 +172,12 @@ function AutoConfig() {
 
       const tried: Step[] = [];
       const all = await api.autoconfigCandidates();
-      const skipped =
-        all.length - all.filter(({ config }) => measurable(config)).length;
-      for (const { config, cost } of all.filter(({ config }) =>
-        measurable(config),
-      )) {
+      const usable = all.filter(({ config }) => measurable(config));
+      const skipped = all.length - usable.length;
+      setProgress([0, usable.length]);
+      for (const [i, { config, cost }] of usable.entries()) {
+        if (cancelled.current) break;
+        setProgress([i + 1, usable.length]);
         setSteps((prev) => [
           ...prev,
           {
@@ -228,10 +234,13 @@ function AutoConfig() {
         skipped > 0
           ? ` ${skipped} that only touch other ports were skipped: the check speaks TLS on ${api.PROBED_TCP_PORT} and nothing else, so it could not tell whether they helped.`
           : "";
+      const stopped = cancelled.current
+        ? ` Stopped after ${tried.length} of ${usable.length}.`
+        : "";
       const helped = rank(tried);
       if (helped.length === 0) {
         setError(
-          `No strategy got anything through. The engine is stopped and the machine is back as it was.${unmeasured}`,
+          `No strategy got anything through. The engine is stopped and the machine is back as it was.${stopped}${unmeasured}`,
         );
         return;
       }
@@ -240,8 +249,8 @@ function AutoConfig() {
       const best = helped[0].unblocked;
       setNote(
         best === blocked.length
-          ? `${helped.filter((s) => s.worked).length} of ${tried.length} strategies got everything through. The gentlest is picked for you; any of them can be used instead.`
-          : `Nothing got all ${blocked.length} through. The best got ${best}. Pick one or try again later — a censor is not the same from one hour to the next.${unmeasured}`,
+          ? `${helped.filter((s) => s.worked).length} of ${tried.length} strategies got everything through. The gentlest is picked for you; any of them can be used instead.${stopped}`
+          : `Nothing got all ${blocked.length} through. The best got ${best}. Pick one or try again later — a censor is not the same from one hour to the next.${stopped}${unmeasured}`,
       );
     } catch (e) {
       setError(String(e));
@@ -275,10 +284,25 @@ function AutoConfig() {
           <Button onClick={() => void run()} loading={running}>
             Find a working strategy
           </Button>
+          {running && (
+            <>
+              <Button
+                variant="soft"
+                color="gray"
+                onClick={() => (cancelled.current = true)}
+              >
+                Stop
+              </Button>
+              <Text size="2">
+                {progress[0]} of {progress[1]}
+              </Text>
+            </>
+          )}
           <Text size="1" color="gray">
-            Tries every strategy for a few seconds each, then lists the ones
-            that got the blocked sites through, gentlest first. Nothing is kept
-            until you say so.
+            Tries every strategy for a couple of seconds each, then lists the
+            ones that got the blocked sites through, gentlest first. The likely
+            ones come early, so stopping partway still gives an answer. Nothing
+            is kept until you say so.
           </Text>
         </Flex>
 
