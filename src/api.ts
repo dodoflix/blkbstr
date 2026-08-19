@@ -116,6 +116,10 @@ export type Report = {
 export const checkReachability = (hosts?: string[]) =>
   invoke<Report>("check_reachability", { hosts });
 
+/** Ordered most to least likely to be enough. The walk is driven from here: start each one as a
+ *  trial, re-check, stop it if it did not help. */
+export const autoconfigCandidates = () => invoke<Config[]>("autoconfig_candidates");
+
 export type Warning = {
   /** Null for warnings about the config as a whole. */
   strategy: string | null;

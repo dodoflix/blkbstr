@@ -1,5 +1,6 @@
 //! Types shared by the unprivileged GUI (`src-tauri`) and the privileged daemon (`blkbstrd`).
 
+pub mod candidates;
 pub mod config;
 pub mod detect;
 pub mod paths;
