@@ -5,7 +5,7 @@ done in this repository.
 
 ## Onboarding & installation
 
-- [ ] Reachability check against a list of commonly blocked sites, with a per-site verdict — M2
+- [x] Reachability check against a list of commonly blocked sites, with a per-site verdict — M2
 - [x] Locate the engine binary; refuse by name when missing — M1
 - [x] Report the installed zapret2 version — M1
 - [x] Check for LuaJIT 2.1+ / Lua 5.3+ before anything else — M2
