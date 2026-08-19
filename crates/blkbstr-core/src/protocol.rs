@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::io::{BufRead, Write};
 
 /// Every request carries this; the daemon refuses mismatched majors rather than guessing.
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
@@ -25,6 +25,9 @@ pub enum Request {
         #[serde(default)]
         ephemeral: bool,
     },
+    /// Keep a trial run: cancels its automatic revert and persists it as the config to bring back
+    /// at boot. Nothing else can stop a trial from being undone.
+    Confirm,
     /// Stop the engine, leaving the firewall in its pre-start state.
     Stop,
 }
@@ -64,6 +67,10 @@ pub struct EngineStatus {
     /// True when the active config was started with `ephemeral` and will not survive a restart.
     #[serde(default)]
     pub ephemeral: bool,
+    /// Seconds until an unconfirmed trial run is undone. `None` once confirmed, or when the run
+    /// was never a trial.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revert_in_seconds: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pid: Option<u32>,
     /// Unix epoch seconds the engine started at.

@@ -25,7 +25,7 @@ done in this repository.
 - [x] Parameter-file preview, so the UI can show what will actually run — M1
 - [x] Save, list and load named configs in the user's own directory — M0
 - [ ] Config editor UI with live linting — M2
-- [ ] Ephemeral "try it" mode with confirm-or-revert timeout — M2
+- [x] Ephemeral "try it" mode with confirm-or-revert timeout — M2
 - [ ] Auto-configuration: rank candidate strategies, apply each ephemerally, re-test, keep the
       first that works, save under a user-chosen name. Wrap upstream `blockcheck2.sh` rather than
       reimplementing it — M2

@@ -271,6 +271,13 @@ function SetupPanel() {
   );
 }
 
+/** Coarse, because the status is polled every few seconds and a per-second countdown would
+ *  visibly stutter. Approximate is honest here; the daemon holds the real deadline. */
+function countdown(seconds: number): string {
+  if (seconds >= 60) return `about ${Math.round(seconds / 60)} min`;
+  return `${seconds}s`;
+}
+
 function StatusPanel() {
   const [daemon, setDaemon] = useState<api.DaemonInfo>();
   const [status, setStatus] = useState<api.EngineStatus>();
@@ -410,6 +417,31 @@ function StatusPanel() {
         </DataList.Root>
       </Card>
 
+      {status?.revert_in_seconds !== undefined && (
+        <Callout.Root color="orange">
+          <Callout.Text>
+            <Flex align="center" gap="3" wrap="wrap">
+              <Text>
+                Trying <Code>{status.active_config}</Code>. It reverts on its own in{" "}
+                {countdown(status.revert_in_seconds)} unless you keep it — so if this broke your
+                connection, doing nothing fixes it.
+              </Text>
+              <Button size="1" onClick={() => void act(api.engineConfirm)}>
+                Keep it
+              </Button>
+              <Button
+                size="1"
+                variant="soft"
+                color="red"
+                onClick={() => void act(api.engineStop)}
+              >
+                Undo now
+              </Button>
+            </Flex>
+          </Callout.Text>
+        </Callout.Root>
+      )}
+
       {svc?.installed && (
         <Flex gap="2" align="center" wrap="wrap">
           <Button
@@ -445,6 +477,17 @@ function StatusPanel() {
           }
         >
           Start
+        </Button>
+        <Button
+          variant="soft"
+          disabled={!daemon?.reachable || status?.running}
+          onClick={() =>
+            void act(async () =>
+              api.engineStart(await api.starterConfig("trial"), true),
+            )
+          }
+        >
+          Try it
         </Button>
         <Button
           disabled={!daemon?.reachable || !status?.running}
