@@ -70,13 +70,17 @@ jobs:
 
       - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-latest'
-        # webkit2gtk pulls in gstreamer and a lot else, and azure.archive.ubuntu.com has served
-        # it at ~40 kB/s: 6 minutes for 42 packages, measured. Generous bound so normal slowness
-        # passes, but still bounded so a genuine hang fails instead of occupying a runner.
+        # webkit2gtk pulls in gstreamer and a lot else — 179 packages, and none of them are on the
+        # runner image. Bounded so a mirror that stops answering fails the job instead of sitting
+        # on a runner for half an hour.
         timeout-minutes: 15
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
+          # azure.archive.ubuntu.com is the runner's default mirror and regularly Ign's every
+          # index, costing minutes of retries before apt falls back on its own. Go straight to the
+          # mirror it falls back to.
+          echo 'http://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
           sudo apt-get update -o Acquire::Retries=3
           sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
             libwebkit2gtk-4.1-dev \
@@ -128,14 +132,10 @@ jobs:
           grep -q "$libexec" packaging/linux/selinux/blkbstr.fc
 
       - name: AppArmor profile parses
-        timeout-minutes: 10
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: |
-          sudo apt-get update -o Acquire::Retries=3
-          sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 apparmor
-          # -Q parses and compiles without loading; the runner's kernel is not ours to reconfigure.
-          apparmor_parser -Q -K packaging/linux/apparmor/usr.local.libexec.blkbstrd
+        # No apt step: ubuntu-latest ships apparmor 4.0.1 already. Installing it anyway cost an
+        # `apt-get update` that regularly spends minutes retrying a mirror that answers nothing.
+        # -Q parses and compiles without loading; the runner's kernel is not ours to reconfigure.
+        run: apparmor_parser -Q -K packaging/linux/apparmor/usr.local.libexec.blkbstrd
 
       - name: SELinux module links against the targeted policy
         # In a Fedora container because that is where SELinux users are, and because linking is
