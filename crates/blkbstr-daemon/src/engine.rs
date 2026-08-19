@@ -16,7 +16,7 @@ use blkbstr_core::registry::Platform;
 use blkbstr_core::render::{self, EngineOptions};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// What is running, and what to bring back if it dies.
 struct Active {
@@ -25,6 +25,20 @@ struct Active {
     started_at: Option<u64>,
     /// Set while waiting out a restart backoff; the engine is down until this passes.
     restart_at: Option<Instant>,
+    /// Dead-man's switch for a trial run. It lives here rather than in the GUI because the case it
+    /// exists for is the one where the GUI cannot help: a strategy that takes the network down
+    /// with it, or a client that crashed while the rules were up.
+    revert_at: Option<Instant>,
+}
+
+/// Long enough to open a browser and look at a site, short enough that walking away from a broken
+/// network fixes it. `BLKBSTR_REVERT_SECONDS` shortens it, the same way the `BLKBSTR_*` path
+/// overrides let the daemon be exercised without being installed.
+fn revert_after() -> Duration {
+    std::env::var("BLKBSTR_REVERT_SECONDS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .map_or(Duration::from_secs(120), Duration::from_secs)
 }
 
 pub struct Engine {
@@ -66,6 +80,11 @@ impl Engine {
             started_at: self.active.as_ref().and_then(|a| a.started_at),
             engine_version: self.version.clone(),
             last_error: self.last_error.clone(),
+            revert_in_seconds: self
+                .active
+                .as_ref()
+                .and_then(|a| a.revert_at)
+                .map(|at| at.saturating_duration_since(Instant::now()).as_secs()),
         }
     }
 
@@ -88,6 +107,22 @@ impl Engine {
     ///
     /// ponytail: polling. Swap for SIGCHLD if the daemon ever supervises more than one process.
     pub fn tick(&mut self) {
+        if self
+            .active
+            .as_ref()
+            .and_then(|a| a.revert_at)
+            .is_some_and(|at| Instant::now() >= at)
+        {
+            tracing::warn!("nobody confirmed the trial run; putting the machine back");
+            let outcome = self.stop();
+            // Set after the stop, which clears it: this is the reason the engine is down and the
+            // user needs to see it, having quite possibly been unable to reach anything.
+            self.last_error = Some(match outcome {
+                Ok(()) => "the trial run was not confirmed, so it was reverted".into(),
+                Err(e) => format!("reverting the unconfirmed trial run failed: {e:#}"),
+            });
+            return;
+        }
         if let Some(at) = self.active.as_ref().and_then(|a| a.restart_at) {
             if Instant::now() >= at {
                 self.restart();
@@ -212,8 +247,22 @@ impl Engine {
             ephemeral,
             started_at: now(),
             restart_at: None,
+            revert_at: ephemeral.then(|| Instant::now() + revert_after()),
         });
         tracing::info!(config = %config.name, pid, ephemeral, "engine started");
+        Ok(())
+    }
+
+    /// Keeps a trial run: cancels the revert and persists the config, so it comes back at boot.
+    pub fn confirm(&mut self) -> Result<()> {
+        let Some(active) = self.active.as_mut() else {
+            bail!("nothing is running, so there is nothing to keep");
+        };
+        active.ephemeral = false;
+        active.revert_at = None;
+        let config = active.config.clone();
+        save_active(&config).context("saving the confirmed config")?;
+        tracing::info!(config = %config.name, "trial run kept");
         Ok(())
     }
 

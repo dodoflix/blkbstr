@@ -64,6 +64,13 @@ fn engine_start(config: Config, ephemeral: bool) -> Result<(), daemon::Error> {
     .map(|_| ())
 }
 
+/// Keeps a trial run that would otherwise be undone. The deadline is the daemon's, so this is the
+/// only thing that can cancel it.
+#[tauri::command]
+fn engine_confirm() -> Result<(), daemon::Error> {
+    daemon::request(Request::Confirm).map(|_| ())
+}
+
 #[tauri::command]
 fn engine_stop() -> Result<(), daemon::Error> {
     daemon::request(Request::Stop).map(|_| ())
@@ -212,6 +219,7 @@ pub fn run() {
             check_reachability,
             engine_status,
             engine_start,
+            engine_confirm,
             engine_stop,
             lint_config,
             known_functions,
