@@ -10,6 +10,7 @@ use blkbstr_core::reachability;
 use blkbstr_core::registry::{self, Warning};
 use blkbstr_core::Config;
 use serde::Serialize;
+use std::time::Duration;
 
 #[derive(Serialize)]
 pub struct DaemonInfo {
@@ -91,7 +92,10 @@ fn detect_environment() -> detect::Environment {
 /// Blocking work on a pool thread rather than the async runtime: an unreachable host costs a full
 /// timeout, and the whole point of this call is to sit through those.
 #[tauri::command]
-async fn check_reachability(hosts: Option<Vec<String>>) -> Result<reachability::Report, String> {
+async fn check_reachability(
+    hosts: Option<Vec<String>>,
+    timeout_ms: Option<u64>,
+) -> Result<reachability::Report, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let hosts = hosts.unwrap_or_else(|| {
             reachability::DEFAULT_HOSTS
@@ -99,7 +103,8 @@ async fn check_reachability(hosts: Option<Vec<String>>) -> Result<reachability::
                 .map(|h| (*h).to_owned())
                 .collect()
         });
-        reachability::check(&hosts, reachability::DEFAULT_TIMEOUT)
+        let timeout = timeout_ms.map_or(reachability::DEFAULT_TIMEOUT, Duration::from_millis);
+        reachability::check(&hosts, timeout)
     })
     .await
     .map_err(|e| format!("the reachability check did not finish: {e}"))
@@ -111,8 +116,8 @@ async fn check_reachability(hosts: Option<Vec<String>>) -> Result<reachability::
 /// progress and cancellation come for free and the privileged surface gains nothing. If the UI
 /// dies mid-walk, the trial run's own deadline puts the machine back.
 #[tauri::command]
-fn autoconfig_candidates() -> Vec<Config> {
-    candidates::candidates()
+fn autoconfig_candidates() -> Vec<candidates::Candidate> {
+    candidates::ranked()
 }
 
 /// What in this config will not do what it looks like it does. Pure and local — the daemon is not
@@ -185,6 +190,14 @@ fn save_config(config: Config) -> Result<(), String> {
     configs::save(&config)
 }
 
+/// Deleting the file only. If that config is the one running, it keeps running: stopping the
+/// engine is a separate decision and doing it as a side effect of tidying up a list would be a
+/// surprise the user cannot undo.
+#[tauri::command]
+fn delete_config(name: String) -> Result<(), String> {
+    configs::delete(&name)
+}
+
 /// WebKitGTK's DMA-BUF renderer fails on the NVIDIA proprietary driver under Wayland, killing the
 /// process at startup with:
 ///
@@ -246,6 +259,7 @@ pub fn run() {
             list_configs,
             load_config,
             save_config,
+            delete_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

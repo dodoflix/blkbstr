@@ -29,10 +29,17 @@ pub const DEFAULT_HOSTS: &[&str] = &[
 /// one fails the network is broken, which is a different problem with a different fix.
 pub const CONTROL_HOST: &str = "example.com";
 
-const PORT: u16 = 443;
+/// The only port the check speaks on. A candidate that filters some other port cannot change what
+/// this measures, so the walk has nothing to learn by trying it.
+pub const PORT: u16 = 443;
 /// Long enough for a slow mobile link, short enough that a silently dropped connection does not
 /// hold the whole check open.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Used while walking candidates rather than [`DEFAULT_TIMEOUT`]. A host that a strategy has
+/// unblocked answers in a fraction of a second; the rest of the wait is spent proving that a
+/// silent drop is still a silent drop, once per candidate.
+pub const TRIAL_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
