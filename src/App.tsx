@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Badge,
   Button,
@@ -10,6 +10,7 @@ import {
   DataList,
   Flex,
   Heading,
+  RadioGroup,
   ScrollArea,
   Select,
   Tabs,
@@ -73,12 +74,97 @@ export default function App() {
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-/** Long enough for the engine to have the rules up and a connection or two to start using them. */
-const SETTLE_MS = 1500;
+/** The rules are already installed when engineStart returns; this is only for the engine to be
+ *  reading the queue. Measured at well under 250ms, so this is mostly margin. */
+const SETTLE_MS = 600;
 
-type Step = { name: string; notes?: string; outcome: string; worked?: boolean };
+/** A candidate that filters ports the check never speaks on cannot change what the check measures,
+ *  so trying it costs a full timeout to learn nothing. */
+function measurable(config: api.Config): boolean {
+  return config.strategies.some(
+    (s) =>
+      s.enabled &&
+      (s.filter.tcp ?? "").split(",").includes(api.PROBED_TCP_PORT),
+  );
+}
 
-/** Walks the candidate list until the blocked sites load.
+type Step = {
+  name: string;
+  notes?: string;
+  outcome: string;
+  /** Undefined while the candidate is still being tried. */
+  worked?: boolean;
+  unblocked: number;
+  cost: number;
+  config: api.Config;
+  /** Filled in by the measurement pass, which only runs for candidates that helped. */
+  impact?: Impact;
+};
+
+/** What a strategy costs the rest of the connection, measured rather than guessed. */
+type Impact = {
+  /** Median TLS handshake time to the hosts that already worked. */
+  latencyMs: number;
+  /** How much slower than with no strategy running. */
+  deltaMs: number;
+  /** Hosts that worked before this strategy and stopped once it was applied. */
+  broke: string[];
+};
+
+const median = (xs: number[]) =>
+  xs.length ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] : 0;
+
+/** Handshake time across hosts that already worked, and anything that stopped working.
+ *
+ *  Three rounds: one handshake is noisy enough to invent a difference that is not there. A host
+ *  counts as broken only if it failed every round, so a single flap does not condemn a strategy. */
+async function measure(hosts: string[]): Promise<Omit<Impact, "deltaMs">> {
+  const rounds: number[] = [];
+  const failures = new Map<string, number>();
+  const ROUNDS = 3;
+  for (let i = 0; i < ROUNDS; i++) {
+    const report = await api.checkReachability(hosts, api.TRIAL_TIMEOUT_MS);
+    rounds.push(
+      median(
+        report.sites
+          .filter((site) => site.verdict === "fine")
+          .map((site) => site.elapsed_ms),
+      ),
+    );
+    for (const site of report.sites) {
+      if (site.verdict !== "fine") {
+        failures.set(site.host, (failures.get(site.host) ?? 0) + 1);
+      }
+    }
+  }
+  return {
+    latencyMs: median(rounds),
+    broke: [...failures].filter(([, n]) => n === ROUNDS).map(([host]) => host),
+  };
+}
+
+/** Best first: more sites through wins, then the strategy that disturbs traffic least, then the
+ *  earlier one, which is the hand-ranked order.
+ *
+ *  Includes strategies that only got some of the sites through. When nothing gets everything, the
+ *  one that gets most of it is still the best answer available, and hiding it helps nobody. */
+function rank(steps: Step[]): Step[] {
+  return steps
+    .filter((step) => step.unblocked > 0)
+    .sort(
+      (a, b) =>
+        b.unblocked - a.unblocked ||
+        // Breaking a site that used to work is worse than any amount of slowness.
+        (a.impact?.broke.length ?? 0) - (b.impact?.broke.length ?? 0) ||
+        (a.impact?.deltaMs ?? 0) - (b.impact?.deltaMs ?? 0) ||
+        a.cost - b.cost,
+    );
+}
+
+/** Tries every candidate and reports all of them that worked.
+ *
+ *  It does not stop at the first success: the first strategy that gets through is not necessarily
+ *  the one to live with, and which trade-off is acceptable is the user's call, not a heuristic's.
  *
  *  The loop lives here rather than in the daemon because every step is already an ordinary
  *  start / check / stop: driving it from the UI costs no privileged surface, makes progress and
@@ -91,14 +177,29 @@ function AutoConfig() {
   const [saveAs, setSaveAs] = useState("auto");
   const [note, setNote] = useState<string>();
   const [error, setError] = useState<string>();
+  const [blockedCount, setBlockedCount] = useState(0);
+  const [progress, setProgress] = useState<[number, number]>([0, 0]);
+  const [measuring, setMeasuring] = useState(false);
+  // A ref, not state: the walk reads it inside a loop that never re-renders.
+  const cancelled = useRef(false);
 
-  const finish = (name: string, outcome: string, worked = false) =>
+  const finish = (
+    name: string,
+    outcome: string,
+    worked = false,
+    unblocked = 0,
+  ) =>
     setSteps((prev) =>
-      prev.map((step) => (step.name === name ? { ...step, outcome, worked } : step)),
+      prev.map((step) =>
+        step.name === name ? { ...step, outcome, worked, unblocked } : step,
+      ),
     );
 
   const run = async () => {
+    cancelled.current = false;
     setRunning(true);
+    setMeasuring(false);
+    setProgress([0, 0]);
     setSteps([]);
     setWinner(undefined);
     setNote(undefined);
@@ -114,42 +215,139 @@ function AutoConfig() {
       const blocked = baseline.sites
         .filter((site) => site.verdict !== "fine")
         .map((site) => site.host);
+      // The hosts a strategy is not supposed to change. They are what "did this make anything
+      // worse" is measured against, so the control host is in there even if nothing else is.
+      const unaffected = baseline.sites
+        .filter((site) => site.verdict === "fine")
+        .map((site) => site.host);
+      unaffected.push(baseline.control.host);
+      setBlockedCount(blocked.length);
       if (blocked.length === 0) {
-        setNote("Every site on the list already loads. There is nothing to work around.");
+        setNote(
+          "Every site on the list already loads. There is nothing to work around.",
+        );
         return;
       }
 
-      for (const candidate of await api.autoconfigCandidates()) {
+      const tried: Step[] = [];
+      const all = await api.autoconfigCandidates();
+      const usable = all.filter(({ config }) => measurable(config));
+      const skipped = all.length - usable.length;
+      setProgress([0, usable.length]);
+      for (const [i, { config, cost }] of usable.entries()) {
+        if (cancelled.current) break;
+        setProgress([i + 1, usable.length]);
         setSteps((prev) => [
           ...prev,
-          { name: candidate.name, notes: candidate.notes, outcome: "trying…" },
+          {
+            name: config.name,
+            notes: config.notes,
+            outcome: "trying…",
+            unblocked: 0,
+            cost,
+            config,
+          },
         ]);
+        let step: Step = {
+          name: config.name,
+          notes: config.notes,
+          outcome: "",
+          unblocked: 0,
+          cost,
+          config,
+        };
         try {
-          await api.engineStart(candidate, true);
+          await api.engineStart(config, true);
         } catch (e) {
-          // The engine's own --dry-run refuses a config it cannot load, before any rule is
-          // installed. That is a candidate to skip, not a reason to stop.
-          finish(candidate.name, `the engine refused it: ${e}`);
+          // The engine refuses a config it cannot load before any rule is installed. That is a
+          // candidate to skip, not a reason to stop.
+          finish(config.name, `the engine refused it: ${e}`);
           continue;
         }
         await sleep(SETTLE_MS);
-        const report = await api.checkReachability(blocked);
-        const stillBlocked = report.sites.filter((site) => site.verdict !== "fine");
-        if (stillBlocked.length === 0) {
-          finish(candidate.name, `all ${blocked.length} load`, true);
-          setWinner(candidate);
-          setSaveAs(candidate.name);
-          return;
-        }
-        finish(candidate.name, `${stillBlocked.length} of ${blocked.length} still blocked`);
+        const report = await api.checkReachability(
+          blocked,
+          api.TRIAL_TIMEOUT_MS,
+        );
+        // Always stop: every candidate is measured against the same untouched machine, and the
+        // one the user settles on is started again by name when they keep it.
         await api.engineStop();
+
+        const unblocked = report.sites.filter(
+          (site) => site.verdict === "fine",
+        ).length;
+        const worked = unblocked === blocked.length;
+        step = { ...step, worked, unblocked };
+        tried.push(step);
+        finish(
+          config.name,
+          worked
+            ? `all ${blocked.length} load`
+            : `${blocked.length - unblocked} of ${blocked.length} still blocked`,
+          worked,
+          unblocked,
+        );
       }
-      setError(
-        "None of the strategies got everything through. The engine is stopped and the machine is back as it was.",
+
+      const unmeasured =
+        skipped > 0
+          ? ` ${skipped} that only touch other ports were skipped: the check speaks TLS on ${api.PROBED_TCP_PORT} and nothing else, so it could not tell whether they helped.`
+          : "";
+      // Only what helped gets measured: it is three more checks per candidate, and a strategy that
+      // did not get anything through is not a choice however fast it is.
+      const shortlist = rank(tried);
+      if (shortlist.length > 0 && !cancelled.current) {
+        setMeasuring(true);
+        const before = await measure(unaffected);
+        for (const [i, step] of shortlist.entries()) {
+          if (cancelled.current) break;
+          setProgress([i + 1, shortlist.length]);
+          try {
+            await api.engineStart(step.config, true);
+            await sleep(SETTLE_MS);
+            const after = await measure(unaffected);
+            step.impact = {
+              ...after,
+              deltaMs: after.latencyMs - before.latencyMs,
+            };
+          } catch {
+            // A candidate that started once and will not start again is not one to offer.
+            step.impact = undefined;
+          } finally {
+            await api.engineStop();
+          }
+        }
+        setSteps((prev) =>
+          prev.map((step) => {
+            const measured = shortlist.find((s) => s.name === step.name);
+            return measured ? { ...step, impact: measured.impact } : step;
+          }),
+        );
+        setMeasuring(false);
+      }
+
+      const stopped = cancelled.current
+        ? ` Stopped after ${tried.length} of ${usable.length}.`
+        : "";
+      const helped = rank(tried);
+      if (helped.length === 0) {
+        setError(
+          `No strategy got anything through. The engine is stopped and the machine is back as it was.${stopped}${unmeasured}`,
+        );
+        return;
+      }
+      setWinner(helped[0].config);
+      setSaveAs(helped[0].config.name);
+      const best = helped[0].unblocked;
+      setNote(
+        best === blocked.length
+          ? `${helped.filter((s) => s.worked).length} of ${tried.length} strategies got everything through. The gentlest is picked for you; any of them can be used instead.${stopped}`
+          : `Nothing got all ${blocked.length} through. The best got ${best}. Pick one or try again later — a censor is not the same from one hour to the next.${stopped}${unmeasured}`,
       );
     } catch (e) {
       setError(String(e));
     } finally {
+      setMeasuring(false);
       setRunning(false);
     }
   };
@@ -170,6 +368,8 @@ function AutoConfig() {
     }
   };
 
+  const working = rank(steps);
+
   return (
     <Card>
       <Flex direction="column" gap="3">
@@ -177,9 +377,26 @@ function AutoConfig() {
           <Button onClick={() => void run()} loading={running}>
             Find a working strategy
           </Button>
+          {running && (
+            <>
+              <Button
+                variant="soft"
+                color="gray"
+                onClick={() => (cancelled.current = true)}
+              >
+                Stop
+              </Button>
+              <Text size="2">
+                {measuring ? "measuring " : ""}
+                {progress[0]} of {progress[1]}
+              </Text>
+            </>
+          )}
           <Text size="1" color="gray">
-            Tries each strategy for a few seconds and keeps the first that gets the blocked sites
-            through. Nothing is kept until you say so.
+            Tries every strategy for a couple of seconds each, then measures
+            what the ones that worked cost the rest of your connection. The
+            likely ones come early, so stopping partway still gives an answer.
+            Nothing is kept until you say so.
           </Text>
         </Flex>
 
@@ -194,6 +411,49 @@ function AutoConfig() {
           </Callout.Root>
         )}
 
+        {working.length > 0 && (
+          <Flex direction="column" gap="2">
+            <Heading size="2">Strategies that helped</Heading>
+            <RadioGroup.Root
+              value={winner?.name ?? ""}
+              onValueChange={(name) => {
+                const picked = working.find((step) => step.name === name);
+                if (picked) {
+                  setWinner(picked.config);
+                  setSaveAs(picked.name);
+                }
+              }}
+            >
+              <Flex direction="column" gap="2">
+                {working.map((step, i) => (
+                  <RadioGroup.Item key={step.name} value={step.name}>
+                    <Flex align="center" gap="2" wrap="wrap">
+                      <Text size="2">{step.name}</Text>
+                      {i === 0 && <Badge color="jade">gentlest</Badge>}
+                      {!step.worked && (
+                        <Badge color="amber">
+                          {step.unblocked} of {blockedCount}
+                        </Badge>
+                      )}
+                      {step.impact && step.impact.broke.length > 0 && (
+                        <Badge color="red">
+                          broke {step.impact.broke.join(", ")}
+                        </Badge>
+                      )}
+                      <Text size="1" color="gray">
+                        {step.impact
+                          ? impactLabel(step.impact)
+                          : `disturbance ${step.cost}`}{" "}
+                        · {step.notes}
+                      </Text>
+                    </Flex>
+                  </RadioGroup.Item>
+                ))}
+              </Flex>
+            </RadioGroup.Root>
+          </Flex>
+        )}
+
         {steps.length > 0 && (
           <DataList.Root>
             {steps.map((step) => (
@@ -202,7 +462,9 @@ function AutoConfig() {
                 <DataList.Value>
                   <Flex direction="column">
                     <Flex align="center" gap="2" wrap="wrap">
-                      <Badge color={step.worked ? "jade" : "gray"}>{step.outcome}</Badge>
+                      <Badge color={step.worked ? "jade" : "gray"}>
+                        {step.outcome}
+                      </Badge>
                     </Flex>
                     {step.notes && (
                       <Text size="1" color="gray">
@@ -237,8 +499,22 @@ function AutoConfig() {
   );
 }
 
+/** The measured cost of a strategy in one phrase. A handshake difference under 10ms is inside the
+ *  noise of three rounds, so it is reported as no difference rather than as a small one. */
+function impactLabel(impact: Impact): string {
+  const { latencyMs, deltaMs, broke } = impact;
+  const speed =
+    Math.abs(deltaMs) < 10
+      ? `${latencyMs}ms handshake, no slower`
+      : `${latencyMs}ms handshake, ${deltaMs > 0 ? "+" : ""}${deltaMs}ms`;
+  return broke.length > 0 ? speed : `${speed}, nothing else broke`;
+}
+
 /** What each verdict means in one phrase, and how alarmed to look about it. */
-const VERDICTS: Record<api.Verdict, { label: string; color: "jade" | "amber" | "red" }> = {
+const VERDICTS: Record<
+  api.Verdict,
+  { label: string; color: "jade" | "amber" | "red" }
+> = {
   fine: { label: "reachable", color: "jade" },
   dns_failed: { label: "DNS failed", color: "amber" },
   dns_poisoned: { label: "DNS poisoned", color: "red" },
@@ -330,8 +606,9 @@ function SetupPanel() {
       {!env.engine && (
         <Callout.Root color="amber">
           <Callout.Text>
-            zapret2 is not installed. Blockbuster drives the upstream engine and does not ship one;
-            put <Code>nfqws2</Code> on <Code>PATH</Code> or in <Code>/opt/zapret2</Code>.
+            zapret2 is not installed. Blockbuster drives the upstream engine and
+            does not ship one; put <Code>nfqws2</Code> on <Code>PATH</Code> or
+            in <Code>/opt/zapret2</Code>.
           </Callout.Text>
         </Callout.Root>
       )}
@@ -339,8 +616,9 @@ function SetupPanel() {
       {lua && !lua.supported && (
         <Callout.Root color="red">
           <Callout.Text>
-            {lua.version} is too old. zapret2's strategies are Lua, so the engine will start and
-            then fail to load them — LuaJIT 2.1+ or Lua 5.3+ is needed.
+            {lua.version} is too old. zapret2's strategies are Lua, so the
+            engine will start and then fail to load them — LuaJIT 2.1+ or Lua
+            5.3+ is needed.
           </Callout.Text>
         </Callout.Root>
       )}
@@ -357,7 +635,8 @@ function SetupPanel() {
                 {env.distro && (
                   <Text size="1" color="gray">
                     {env.distro.pretty_name ?? env.distro.id}
-                    {env.distro.package_manager && ` \u00b7 ${env.distro.package_manager}`}
+                    {env.distro.package_manager &&
+                      ` \u00b7 ${env.distro.package_manager}`}
                   </Text>
                 )}
               </Flex>
@@ -423,8 +702,9 @@ function SetupPanel() {
           {!report.network_ok && (
             <Callout.Root color="amber" mb="3">
               <Callout.Text>
-                Even <Code>{report.control.host}</Code> did not answer, so this is the network
-                rather than a censor. Nothing below means anything until that is fixed.
+                Even <Code>{report.control.host}</Code> did not answer, so this
+                is the network rather than a censor. Nothing below means
+                anything until that is fixed.
               </Callout.Text>
             </Callout.Root>
           )}
@@ -491,8 +771,8 @@ function StatusPanel() {
       {daemon && !daemon.reachable && (
         <Callout.Root color="amber">
           <Callout.Text>
-            The privileged service is not reachable, so nothing can be started. Install it with{" "}
-            <Code>packaging/linux/install.sh</Code>.
+            The privileged service is not reachable, so nothing can be started.
+            Install it with <Code>packaging/linux/install.sh</Code>.
             {daemon.problem && (
               <>
                 <br />
@@ -591,9 +871,9 @@ function StatusPanel() {
           <Callout.Text>
             <Flex align="center" gap="3" wrap="wrap">
               <Text>
-                Trying <Code>{status.active_config}</Code>. It reverts on its own in{" "}
-                {countdown(status.revert_in_seconds)} unless you keep it — so if this broke your
-                connection, doing nothing fixes it.
+                Trying <Code>{status.active_config}</Code>. It reverts on its
+                own in {countdown(status.revert_in_seconds)} unless you keep it
+                — so if this broke your connection, doing nothing fixes it.
               </Text>
               <Button size="1" onClick={() => void act(api.engineConfirm)}>
                 Keep it
@@ -615,17 +895,13 @@ function StatusPanel() {
         <Flex gap="2" align="center" wrap="wrap">
           <Button
             variant="soft"
-            onClick={() =>
-              void act(() => api.serviceSetActive(!svc.active))
-            }
+            onClick={() => void act(() => api.serviceSetActive(!svc.active))}
           >
             {svc.active ? "Stop service" : "Start service"}
           </Button>
           <Button
             variant="soft"
-            onClick={() =>
-              void act(() => api.serviceSetEnabled(!svc.enabled))
-            }
+            onClick={() => void act(() => api.serviceSetEnabled(!svc.enabled))}
           >
             {svc.enabled ? "Don't start at boot" : "Start at boot"}
           </Button>
@@ -642,7 +918,9 @@ function StatusPanel() {
         <Button
           disabled={!daemon?.reachable || status?.running}
           onClick={() =>
-            void act(async () => api.engineStart(await api.starterConfig("default")))
+            void act(async () =>
+              api.engineStart(await api.starterConfig("default")),
+            )
           }
         >
           Start
@@ -673,34 +951,160 @@ function StatusPanel() {
 
 function ConfigsPanel() {
   const [names, setNames] = useState<string[]>([]);
+  const [active, setActive] = useState<string>();
+  const [open, setOpen] = useState<string>();
+  const [preview, setPreview] = useState("");
+  const [busy, setBusy] = useState<string>();
+  const [note, setNote] = useState<string>();
+  const [confirming, setConfirming] = useState<string>();
   const [error, setError] = useState<string>();
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     api.listConfigs().then(setNames, (e) => setError(String(e)));
+    api.engineStatus().then(
+      (status) => setActive(status.running ? status.active_config : undefined),
+      () => setActive(undefined),
+    );
   }, []);
 
-  if (error) {
-    return (
-      <Callout.Root color="red">
-        <Callout.Text>{error}</Callout.Text>
-      </Callout.Root>
-    );
-  }
+  useEffect(refresh, [refresh]);
+
+  /** Shows what the engine will actually be given, which is the only way to tell two
+   *  similarly-named configs apart without opening the file. */
+  const show = async (name: string) => {
+    if (open === name) {
+      setOpen(undefined);
+      return;
+    }
+    try {
+      setPreview(await api.previewConfig(await api.loadConfig(name)));
+      setOpen(name);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const use = async (name: string) => {
+    setBusy(name);
+    setError(undefined);
+    try {
+      await api.engineStart(await api.loadConfig(name));
+      setNote(`${name} is running.`);
+      refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const remove = async (name: string) => {
+    setBusy(name);
+    setError(undefined);
+    try {
+      await api.deleteConfig(name);
+      setNote(`Deleted ${name}.`);
+      setConfirming(undefined);
+      if (open === name) setOpen(undefined);
+      refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(undefined);
+    }
+  };
 
   return (
     <Card>
-      {names.length === 0 ? (
-        <Text color="gray">
-          No saved configs yet. The first-run wizard will create one; until then, drop JSON files
-          in the configs directory.
-        </Text>
-      ) : (
-        <Flex direction="column" gap="1">
-          {names.map((name) => (
-            <Text key={name}>{name}</Text>
-          ))}
-        </Flex>
-      )}
+      <Flex direction="column" gap="3">
+        {note && (
+          <Callout.Root color="jade">
+            <Callout.Text>{note}</Callout.Text>
+          </Callout.Root>
+        )}
+        {error && (
+          <Callout.Root color="red">
+            <Callout.Text>{error}</Callout.Text>
+          </Callout.Root>
+        )}
+
+        {names.length === 0 ? (
+          <Text color="gray">
+            No saved configs yet. Find a working strategy on the Setup tab and
+            save it, or drop JSON files in the configs directory.
+          </Text>
+        ) : (
+          <Flex direction="column" gap="2">
+            {names.map((name) => (
+              <Flex key={name} direction="column" gap="2">
+                <Flex align="center" gap="2" wrap="wrap">
+                  <Text weight="medium">{name}</Text>
+                  {name === active && <Badge color="jade">running</Badge>}
+                  <Flex gap="2" ml="auto">
+                    <Button
+                      size="1"
+                      variant="soft"
+                      onClick={() => void show(name)}
+                    >
+                      {open === name ? "Hide" : "Show"}
+                    </Button>
+                    <Button
+                      size="1"
+                      disabled={name === active}
+                      loading={busy === name}
+                      onClick={() => void use(name)}
+                    >
+                      Use
+                    </Button>
+                    {confirming === name ? (
+                      <>
+                        <Button
+                          size="1"
+                          color="red"
+                          loading={busy === name}
+                          onClick={() => void remove(name)}
+                        >
+                          Delete for good
+                        </Button>
+                        <Button
+                          size="1"
+                          variant="soft"
+                          onClick={() => setConfirming(undefined)}
+                        >
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        size="1"
+                        color="red"
+                        variant="soft"
+                        onClick={() => setConfirming(name)}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </Flex>
+                </Flex>
+                {open === name && (
+                  <ScrollArea style={{ maxHeight: "16rem" }}>
+                    <Code
+                      size="1"
+                      style={{
+                        whiteSpace: "pre",
+                        display: "block",
+                        padding: "0.5rem",
+                      }}
+                    >
+                      {preview}
+                    </Code>
+                  </ScrollArea>
+                )}
+              </Flex>
+            ))}
+          </Flex>
+        )}
+      </Flex>
     </Card>
   );
 }
@@ -715,10 +1119,13 @@ function LogsPanel() {
   const [exported, setExported] = useState<string>();
 
   useEffect(() => {
-    api.listLogs().then((found) => {
-      setFiles(found);
-      setSelected((current) => current ?? found[0]?.name);
-    }, (e) => setError(String(e)));
+    api.listLogs().then(
+      (found) => {
+        setFiles(found);
+        setSelected((current) => current ?? found[0]?.name);
+      },
+      (e) => setError(String(e)),
+    );
   }, []);
 
   useEffect(() => {

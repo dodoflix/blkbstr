@@ -114,6 +114,47 @@ pub fn locate_engine(binary: &str) -> Option<PathBuf> {
     candidates.into_iter().find(|p| p.is_file())
 }
 
+/// zapret2's own Lua library, in the order its init script loads it. `zapret-lib.lua` defines the
+/// primitives the others build on, so the order is not decorative.
+pub const LUA_SCRIPTS: &[&str] = &["zapret-lib.lua", "zapret-antidpi.lua", "zapret-auto.lua"];
+
+/// Looks for the directory holding [`LUA_SCRIPTS`]. Distribution packages split the binary from the
+/// scripts — the AUR `zapret2-bin` puts `nfqws2` on PATH and the Lua under `/opt/zapret2/lua` — so
+/// this is searched independently of the engine.
+pub fn locate_lua_dir() -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join("lua"));
+            candidates.push(dir.join("../lua"));
+        }
+    }
+    candidates.extend(
+        [
+            "/opt/zapret2/lua",
+            "/usr/share/zapret2/lua",
+            "/usr/local/share/zapret2/lua",
+            "/usr/lib/zapret2/lua",
+        ]
+        .iter()
+        .map(PathBuf::from),
+    );
+    candidates
+        .into_iter()
+        .find(|d| d.join(LUA_SCRIPTS[0]).is_file())
+}
+
+/// The Lua files to pass as `--lua-init`, in load order. Missing ones are skipped rather than
+/// failing: only `zapret-lib.lua` is load-bearing for every action.
+pub fn lua_init_scripts(dir: &Path) -> Vec<String> {
+    LUA_SCRIPTS
+        .iter()
+        .map(|name| dir.join(name))
+        .filter(|p| p.is_file())
+        .map(|p| p.display().to_string())
+        .collect()
+}
+
 /// The best Lua on the machine. Prefers a supported runtime over a newer-looking one: a box with
 /// both `lua` 5.1 and `lua5.4` installed has a working setup, and reporting the 5.1 would send the
 /// user off installing something they already have.

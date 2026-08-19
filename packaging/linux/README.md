@@ -2,7 +2,12 @@
 
 `install.sh` puts the daemon at `/usr/local/libexec/blkbstrd`, installs the systemd unit and the
 polkit action, creates the `blkbstr` group and adds the invoking user to it. `uninstall.sh` removes
-all of it.
+all of it except the group, which it keeps so that reinstalling does not hand out a new GID and cost
+the user another logout; `groupdel blkbstr` finishes the job.
+
+Group membership only reaches a session at login. A new terminal is not a new login — it inherits
+the groups of whatever started it — so the first run after installing needs a full logout, or a
+shell started with `newgrp blkbstr`.
 
 ## Confinement
 

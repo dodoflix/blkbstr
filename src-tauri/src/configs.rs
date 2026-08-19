@@ -45,3 +45,8 @@ pub fn save(config: &Config) -> Result<(), String> {
     let json = config.to_json().map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| format!("{}: {e}", path.display()))
 }
+
+pub fn delete(name: &str) -> Result<(), String> {
+    let path = path_for(name)?;
+    std::fs::remove_file(&path).map_err(|e| format!("{}: {e}", path.display()))
+}

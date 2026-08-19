@@ -54,6 +54,10 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
+          # azure.archive.ubuntu.com is the runner's default mirror and regularly Ign's every
+          # index, costing minutes of retries before apt falls back on its own. Go straight to the
+          # mirror it falls back to.
+          echo 'http://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
           sudo apt-get update -o Acquire::Retries=3
           sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
             libwebkit2gtk-4.1-dev \

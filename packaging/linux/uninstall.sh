@@ -13,6 +13,9 @@ rm -f /etc/systemd/system/blkbstrd.service \
 rmdir /etc/blkbstr 2>/dev/null || true
 systemctl daemon-reload
 
-groupdel blkbstr 2>/dev/null || true
+# The group is deliberately kept. Deleting it means the next install gets a fresh GID, which the
+# already-running desktop session cannot pick up, so every reinstall would cost the user a logout.
+# On its own it grants nothing: the socket it guards is gone with the service.
 rm -rf /var/lib/blkbstr
 echo "removed. logs remain in /var/log/blkbstr; per-user configs in ~/.config/blkbstr"
+echo "the blkbstr group is kept so a reinstall does not need a logout; drop it with: groupdel blkbstr"

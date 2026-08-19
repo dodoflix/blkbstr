@@ -42,6 +42,8 @@ fn main() -> Result<()> {
         engine.restore();
     }
     spawn_monitor(Arc::clone(&engine));
+    #[cfg(unix)]
+    spawn_shutdown(Arc::clone(&engine))?;
 
     for conn in listener.incoming() {
         match conn {
@@ -58,6 +60,30 @@ fn main() -> Result<()> {
             Err(e) => tracing::warn!(error = %e, "accept failed"),
         }
     }
+    Ok(())
+}
+
+/// Takes the engine and the firewall rules down before the process exits. The engine is a child,
+/// not a member of our process group, so a daemon killed without this leaves it running with
+/// NFQUEUE still bound, and every later start dies with
+/// `nfq_create_queue(): Operation not permitted`.
+#[cfg(unix)]
+fn spawn_shutdown(engine: Arc<Mutex<Result<Engine, String>>>) -> Result<()> {
+    use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
+    use signal_hook::iterator::Signals;
+
+    let mut signals =
+        Signals::new([SIGTERM, SIGINT, SIGHUP]).context("installing signal handlers")?;
+    std::thread::spawn(move || {
+        let Some(signal) = signals.forever().next() else {
+            return;
+        };
+        tracing::info!(signal, "shutting down");
+        if let Ok(engine) = engine.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+            engine.shutdown();
+        }
+        std::process::exit(0);
+    });
     Ok(())
 }
 

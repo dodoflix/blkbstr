@@ -80,7 +80,16 @@ npm run tauri dev
 ```
 
 Applying the rules still needs root, so an unprivileged daemon gets as far as `nft` and stops
-there.
+there. To go further, run the privileged daemon from `target/debug` instead:
+
+```sh
+npm run dev:daemon              # builds, stops the service, runs it in the foreground
+npm run watch:daemon            # the same, rebuilt and restarted whenever a .rs file changes
+```
+
+It takes over the installed service's socket and hands it to your own primary group, so the GUI
+reaches it without the `blkbstr` group and without logging out. `sudo systemctl start blkbstrd`
+puts the installed one back.
 
 Windows and the BSDs have no service installer yet; see
 [docs/platform-notes.md](docs/platform-notes.md).
