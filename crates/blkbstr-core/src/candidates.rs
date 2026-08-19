@@ -75,6 +75,41 @@ pub fn candidates() -> Vec<Config> {
             ],
         ),
         tls(
+            "fake-autottl",
+            "Send a decoy that expires before the server sees it, then split and reorder the real one",
+            vec![
+                Action::new("fake")
+                    .with("blob", "fake_default_tls")
+                    .with("ip4_autottl", "-1,3-20")
+                    .with("repeats", "2"),
+                split("multidisorder", "1,midsld"),
+            ],
+        ),
+        tls(
+            "fake-autottl-far",
+            "The same decoy, aimed a little further away",
+            vec![
+                Action::new("fake")
+                    .with("blob", "fake_default_tls")
+                    .with("ip4_autottl", "-3,3-20")
+                    .with("repeats", "2"),
+                split("multidisorder", "1,midsld"),
+            ],
+        ),
+        tls(
+            "fakedsplit-md5",
+            "Split with a decoy carrying a bogus MD5 signature the server discards",
+            vec![split("fakedsplit", "1,midsld").with("tcp_md5", "")],
+        ),
+        tls(
+            "syndata",
+            "Put a decoy hello in the SYN packet, before the real one",
+            vec![
+                Action::new("syndata").with("blob", "fake_default_tls"),
+                split("multisplit", "1,midsld"),
+            ],
+        ),
+        tls(
             "fakedsplit",
             "Split at the domain name with a bad-checksum decoy in the gap",
             vec![split("fakedsplit", "1,midsld").with("badsum", "")],
