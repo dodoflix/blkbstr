@@ -317,6 +317,10 @@ impl Engine {
     ///
     /// Without this the engine outlives a killed daemon, keeps NFQUEUE bound, and every later
     /// start dies with `nfq_create_queue(): Operation not permitted`.
+    ///
+    /// ponytail: unix only, because only the signal thread calls it. Windows needs a console
+    /// control handler wired to the same method before it ships.
+    #[cfg(unix)]
     pub fn shutdown(&mut self) {
         let _ = self.firewall.teardown();
         if let Some(mut child) = self.child.take() {
