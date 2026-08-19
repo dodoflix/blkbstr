@@ -68,6 +68,34 @@ export default function App() {
   );
 }
 
+/** What each verdict means in one phrase, and how alarmed to look about it. */
+const VERDICTS: Record<api.Verdict, { label: string; color: "jade" | "amber" | "red" }> = {
+  fine: { label: "reachable", color: "jade" },
+  dns_failed: { label: "DNS failed", color: "amber" },
+  dns_poisoned: { label: "DNS poisoned", color: "red" },
+  tcp_blocked: { label: "TCP blocked", color: "red" },
+  tls_reset: { label: "reset after SNI", color: "red" },
+  tls_silent: { label: "no answer", color: "red" },
+  bad_host: { label: "bad hostname", color: "amber" },
+};
+
+function SiteRow({ site }: { site: api.SiteResult }) {
+  const verdict = VERDICTS[site.verdict];
+  return (
+    <DataList.Item>
+      <DataList.Label>{site.host}</DataList.Label>
+      <DataList.Value>
+        <Flex align="center" gap="2" wrap="wrap">
+          <Badge color={verdict.color}>{verdict.label}</Badge>
+          <Text size="1" color="gray">
+            {site.detail} · {site.elapsed_ms}ms
+          </Text>
+        </Flex>
+      </DataList.Value>
+    </DataList.Item>
+  );
+}
+
 /** Green when it is there, amber when it is not, red when it is there and unusable. */
 function Detected({ tool, missing }: { tool?: api.Tool; missing: string }) {
   if (!tool) return <Badge color="amber">{missing}</Badge>;
@@ -85,7 +113,20 @@ function Detected({ tool, missing }: { tool?: api.Tool; missing: string }) {
  *  which is exactly when someone needs to know what is missing. */
 function SetupPanel() {
   const [env, setEnv] = useState<api.Environment>();
+  const [report, setReport] = useState<api.Report>();
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string>();
+
+  const runCheck = async () => {
+    setChecking(true);
+    try {
+      setReport(await api.checkReachability());
+      setError(undefined);
+    } catch (e) {
+      setError(String(e));
+    }
+    setChecking(false);
+  };
 
   const refresh = useCallback(async () => {
     try {
@@ -199,11 +240,33 @@ function SetupPanel() {
         </DataList.Root>
       </Card>
 
-      <Flex>
+      <Flex align="center" gap="3">
         <Button variant="soft" onClick={() => void refresh()}>
           Re-check
         </Button>
+        <Button onClick={() => void runCheck()} loading={checking}>
+          Check reachability
+        </Button>
       </Flex>
+
+      {report && (
+        <Card>
+          {!report.network_ok && (
+            <Callout.Root color="amber" mb="3">
+              <Callout.Text>
+                Even <Code>{report.control.host}</Code> did not answer, so this is the network
+                rather than a censor. Nothing below means anything until that is fixed.
+              </Callout.Text>
+            </Callout.Root>
+          )}
+          <DataList.Root>
+            {report.sites.map((site) => (
+              <SiteRow key={site.host} site={site} />
+            ))}
+            <SiteRow site={report.control} />
+          </DataList.Root>
+        </Card>
+      )}
     </Flex>
   );
 }
