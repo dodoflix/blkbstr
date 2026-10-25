@@ -186,6 +186,8 @@ export type Warning = {
 export type DaemonInfo = {
   reachable: boolean;
   version?: string;
+  /** The helper runs a different version than this app. */
+  outdated?: boolean;
   problem?: string;
 };
 

@@ -22,7 +22,7 @@ import { useBackend } from "./backend";
 import { countdown, plural, uptime } from "./format";
 import { usePrefs } from "./prefs";
 import { HostListsPanel, HostModePanel, useTargetConfig } from "./HostPanels";
-import { HelperInstall } from "./HelperInstall";
+import { HelperInstall, HelperOutdated } from "./HelperInstall";
 import { SiteList } from "./SiteList";
 
 const ROW_PLACEHOLDERS = 6;
@@ -212,54 +212,57 @@ export function Dashboard({ onSetup }: { onSetup: () => void }) {
   const blockedSites = report?.sites.filter((s) => s.verdict !== "fine").length ?? 0;
 
   return (
-    <Columns min="26rem" gap={5}>
-      <StatusSheet onSetup={onSetup} />
-        {advanced && (
-          <Panel title="Details">
-            <KeyValue
-              items={[
-                { label: "Service", value: <Badge tone="ok">running v{daemon?.version}</Badge> },
-                { label: "Engine", value: running ? <Badge tone="ok">active</Badge> : <Badge>stopped</Badge> },
-                { label: "Config", value: status?.active_config ?? "none", hidden: !status?.active_config },
-                { label: "Process", value: <Text mono>pid {status?.pid}</Text>, hidden: !status?.pid },
-                { label: "Engine version", value: <Text mono>{status?.engine_version}</Text>, hidden: !status?.engine_version },
-                { label: "Last error", value: <Text color="danger">{status?.last_error}</Text>, hidden: !status?.last_error },
-              ]}
-            />
-          </Panel>
-        )}
+    <Stack gap={5}>
+      <HelperOutdated />
+      <Columns min="26rem" gap={5}>
+        <StatusSheet onSetup={onSetup} />
+          {advanced && (
+            <Panel title="Details">
+              <KeyValue
+                items={[
+                  { label: "Service", value: <Badge tone="ok">running v{daemon?.version}</Badge> },
+                  { label: "Engine", value: running ? <Badge tone="ok">active</Badge> : <Badge>stopped</Badge> },
+                  { label: "Config", value: status?.active_config ?? "none", hidden: !status?.active_config },
+                  { label: "Process", value: <Text mono>pid {status?.pid}</Text>, hidden: !status?.pid },
+                  { label: "Engine version", value: <Text mono>{status?.engine_version}</Text>, hidden: !status?.engine_version },
+                  { label: "Last error", value: <Text color="danger">{status?.last_error}</Text>, hidden: !status?.last_error },
+                ]}
+              />
+            </Panel>
+          )}
 
-      <Panel
-        className="sites-panel"
-        title="Your sites"
-        description={
-          report
-            ? blockedSites === 0
-              ? "Everything on the list loads."
-              : `${plural(blockedSites, "site")} of ${report.sites.length} still ${blockedSites === 1 ? "does" : "do"} not load.`
-            : "Checking which sites load"
-        }
-        actions={
-          <>
-            <Button variant="soft" tone="neutral" size="sm" icon="refresh" loading={checking} onClick={() => void check()}>
-              Check again
-            </Button>
-            <Button variant="soft" tone="neutral" size="sm" icon="wand" onClick={onSetup}>
-              Run setup again
-            </Button>
-          </>
-        }
-      >
-        {report ? <SiteList report={report} /> : <SitesPlaceholder />}
-        {report && !report.network_ok && (
-          <Notice tone="warn" title="The network looks down">
-            Even {report.control.host} did not answer, so these results do not mean anything until that is fixed.
-          </Notice>
-        )}
-      </Panel>
+        <Panel
+          className="sites-panel"
+          title="Your sites"
+          description={
+            report
+              ? blockedSites === 0
+                ? "Everything on the list loads."
+                : `${plural(blockedSites, "site")} of ${report.sites.length} still ${blockedSites === 1 ? "does" : "do"} not load.`
+              : "Checking which sites load"
+          }
+          actions={
+            <>
+              <Button variant="soft" tone="neutral" size="sm" icon="refresh" loading={checking} onClick={() => void check()}>
+                Check again
+              </Button>
+              <Button variant="soft" tone="neutral" size="sm" icon="wand" onClick={onSetup}>
+                Run setup again
+              </Button>
+            </>
+          }
+        >
+          {report ? <SiteList report={report} /> : <SitesPlaceholder />}
+          {report && !report.network_ok && (
+            <Notice tone="warn" title="The network looks down">
+              Even {report.control.host} did not answer, so these results do not mean anything until that is fixed.
+            </Notice>
+          )}
+        </Panel>
 
-      <HostModePanel target={target} />
-      <HostListsPanel target={target} />
-    </Columns>
+        <HostModePanel target={target} />
+        <HostListsPanel target={target} />
+      </Columns>
+    </Stack>
   );
 }

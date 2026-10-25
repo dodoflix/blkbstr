@@ -88,9 +88,10 @@ The named pipe admits SYSTEM and that one user, and refuses remote clients. Chan
 (the "Start at boot" switch) needs administrator rights and prompts each time.
 
 **Uninstall.** An app update runs the old uninstaller with `/UPDATE`; the hooks then only stop the
-service so `blkbstrd.exe` can be replaced, and the service and `C:\ProgramData\blkbstr` stay. A real
+service (and wait until it has stopped) so `blkbstrd.exe` can be replaced, and the service and `C:\ProgramData\blkbstr` stay. A real
 uninstall removes the service and deletes that directory. The engine in Program Files stays either
-way: it was installed by the wizard, not by the installer.
+way: it was installed by the wizard, not by the installer. If the helper still answers with a
+different version than the app after an update, the Dashboard offers to install it again.
 
 **Antivirus.** Windows Security flags the WinDivert driver that ships with the engine and removes it
 as it is written. It also refuses any read of the zip that holds it (`os error 225`), and an

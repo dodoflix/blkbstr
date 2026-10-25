@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, CodeBlock, Stack, Text } from "../ui";
+import { Button, CodeBlock, Notice, Stack, Text } from "../ui";
 import * as api from "../api";
 import { useBackend } from "./backend";
 
@@ -28,5 +28,24 @@ export function HelperInstall() {
         Windows asks for permission once. Only your account can talk to the helper afterwards.
       </Text>
     </Stack>
+  );
+}
+
+/** After an app update the helper can keep running the old binary; installing again swaps it. */
+export function HelperOutdated() {
+  const { daemon } = useBackend();
+  const { canInstall, installing, install } = useHelperInstall();
+  if (!canInstall || !daemon?.outdated) return null;
+  return (
+    <Notice
+      title="The background helper is out of date"
+      action={
+        <Button size="sm" icon="shield-check" loading={installing} onClick={() => void install()}>
+          Update the helper
+        </Button>
+      }
+    >
+      It is running version {daemon.version}. Windows asks for permission once.
+    </Notice>
   );
 }
