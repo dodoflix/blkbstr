@@ -1,0 +1,41 @@
+name: Bug report
+description: Something does not work
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you saw.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Blockbuster version
+      description: From the About line in System, or the release you installed.
+    validations:
+      required: true
+  - type: input
+    id: engine
+    attributes:
+      label: zapret2 version
+      description: What System shows under "zapret2 engine".
+  - type: dropdown
+    id: how
+    attributes:
+      label: How it runs
+      options: [Installed package, AppImage, npm run tauri dev, Built from source]
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Distribution and desktop session
+      description: For example "Arch, KDE Plasma on Wayland".
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Use "Export for a bug report" on the Logs page and read it before pasting, since engine logs name the sites they saw.
+      render: text
