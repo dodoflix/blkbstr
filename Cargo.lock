@@ -272,7 +272,7 @@ dependencies = [
 
 [[package]]
 name = "blkbstr"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "blkbstr-core",
  "interprocess",
@@ -286,7 +286,7 @@ dependencies = [
 
 [[package]]
 name = "blkbstr-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "directories",
  "serde",
@@ -296,7 +296,7 @@ dependencies = [
 
 [[package]]
 name = "blkbstr-daemon"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "blkbstr-core",

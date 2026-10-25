@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as api from "../api";
 import { useAsync, usePoll, useToast } from "../ui";
 import { selectedHosts } from "./sites";
@@ -21,6 +21,8 @@ export type Backend = {
   /** Runs a backend action, reports failure as a toast, and refreshes either way. */
   act: (fn: () => Promise<unknown>, success?: string) => Promise<boolean>;
 };
+
+const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
 
 export const BackendContext = createContext<Backend | null>(null);
 const Ctx = BackendContext;
@@ -69,6 +71,24 @@ export function BackendProvider({ children }: { children: ReactNode }) {
     } finally {
       setChecking(false);
     }
+  }, [toast]);
+
+  // Not usePoll: that also fires whenever the window is shown, which would hit GitHub on every tray click.
+  const announced = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const look = async () => {
+      try {
+        const update = await api.checkAppUpdate();
+        if (!update || update.version === announced.current) return;
+        announced.current = update.version;
+        toast({ title: `Blockbuster ${update.version} is available`, description: "Open System to install it.", tone: "warn", durationMs: 15000 });
+      } catch {
+        // Offline or GitHub unreachable: the next round tries again.
+      }
+    };
+    void look();
+    const timer = setInterval(() => void look(), UPDATE_CHECK_MS);
+    return () => clearInterval(timer);
   }, [toast]);
 
   // The daemon does not push, and uptime is a lie the moment it stops being re-read.
