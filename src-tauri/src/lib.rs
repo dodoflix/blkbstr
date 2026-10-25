@@ -1,5 +1,7 @@
 mod configs;
 mod daemon;
+#[cfg(any(windows, test))]
+mod elevate;
 mod engine_install;
 mod logs;
 mod service;
@@ -84,7 +86,7 @@ fn detect_environment() -> detect::Environment {
     detect::environment()
 }
 
-/// Downloads the pinned zapret2 release and installs it after a polkit prompt. Blocks for the
+/// Downloads the pinned zapret2 release and installs it after a polkit or UAC prompt. Blocks for the
 /// download and for as long as the prompt is open, so it runs on a pool thread.
 #[tauri::command]
 async fn install_engine() -> Result<(), String> {
@@ -222,7 +224,15 @@ fn service_status() -> service::ServiceStatus {
     service::status()
 }
 
-/// Both prompt via polkit; they fail rather than hang when no polkit agent is running.
+/// Registers the background helper. Windows only: it raises one UAC prompt.
+#[tauri::command]
+async fn service_install() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(service::install)
+        .await
+        .map_err(|e| format!("the install did not finish: {e}"))?
+}
+
+/// Both prompt (polkit, or UAC for the start type); they fail rather than hang when no agent is running.
 #[tauri::command]
 fn service_set_enabled(enabled: bool) -> Result<(), String> {
     service::set_enabled(enabled)
@@ -256,6 +266,7 @@ pub fn run() {
             starter_config,
             preview_config,
             service_status,
+            service_install,
             service_set_enabled,
             service_set_active,
             list_logs,

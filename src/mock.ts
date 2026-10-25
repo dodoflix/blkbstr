@@ -78,6 +78,7 @@ export async function mock<T>(cmd: string, args: Record<string, unknown> = {}): 
       return out(scenario === "nodaemon" ? { reachable: false, problem: "connect /run/blkbstr/blkbstr.sock: no such file or directory" } : { reachable: true, version: "0.1.0" });
     case "service_status":
       return out({ installed: scenario !== "nodaemon", enabled: scenario === "ready", active: scenario !== "nodaemon" });
+    case "service_install":
     case "service_set_enabled":
     case "service_set_active":
     case "engine_confirm":
@@ -87,6 +88,12 @@ export async function mock<T>(cmd: string, args: Record<string, unknown> = {}): 
       }
       return out(undefined);
     case "detect_environment":
+      if (new URLSearchParams(location.search).get("platform") === "windows") {
+        return out({
+          platform: "windows",
+          engine: engineInstalled ? { path: "C:\\Program Files\\zapret2\\winws2.exe", version: "v0.9.2" } : undefined,
+        });
+      }
       return out({
         platform: "linux",
         distro: { id: "arch", pretty_name: "CachyOS", package_manager: "pacman" },

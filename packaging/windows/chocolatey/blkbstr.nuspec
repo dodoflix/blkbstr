@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>blkbstr</id>
+    <version>__VERSION__</version>
+    <title>Blockbuster</title>
+    <authors>Blockbuster</authors>
+    <projectUrl>https://github.com/dodoflix/blkbstr</projectUrl>
+    <packageSourceUrl>https://github.com/dodoflix/blkbstr/tree/main/packaging/windows/chocolatey</packageSourceUrl>
+    <licenseUrl>https://github.com/dodoflix/blkbstr/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <tags>zapret zapret2 dpi censorship network</tags>
+    <summary>A desktop app for zapret2.</summary>
+    <description>Checks which sites your network blocks, finds a zapret2 strategy that gets them through, and keeps it running in the background.</description>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

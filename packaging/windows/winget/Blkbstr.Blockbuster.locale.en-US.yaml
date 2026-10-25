@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
+PackageIdentifier: Blkbstr.Blockbuster
+PackageVersion: __VERSION__
+PackageLocale: en-US
+Publisher: Blockbuster
+PublisherUrl: https://github.com/dodoflix/blkbstr
+PackageName: Blockbuster
+PackageUrl: https://github.com/dodoflix/blkbstr
+License: MIT
+LicenseUrl: https://github.com/dodoflix/blkbstr/blob/main/LICENSE
+ShortDescription: A desktop app for zapret2.
+Description: Checks which sites your network blocks, finds a zapret2 strategy that gets them through, and keeps it running in the background.
+Tags:
+  - zapret
+  - zapret2
+  - dpi
+  - censorship
+  - network
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0

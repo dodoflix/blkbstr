@@ -1,7 +1,7 @@
 //! Filesystem and socket locations shared by the GUI and the daemon.
 
 use directories::ProjectDirs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub const QUALIFIER: &str = "dev";
 pub const ORGANIZATION: &str = "blkbstr";
@@ -83,5 +83,16 @@ pub fn log_dir() -> PathBuf {
         PathBuf::from(r"C:\ProgramData\blkbstr\logs")
     } else {
         PathBuf::from("/var/log/blkbstr")
+    }
+}
+
+/// A path as it goes into a parameter file. winws2 is a Cygwin program, so it reads `C:/dir/file`
+/// where a native path with backslashes is not guaranteed to survive its option parser.
+pub fn for_engine(path: &Path) -> String {
+    let text = path.display().to_string();
+    if cfg!(windows) {
+        text.replace('\\', "/")
+    } else {
+        text
     }
 }

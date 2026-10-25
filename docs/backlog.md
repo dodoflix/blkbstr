@@ -9,9 +9,9 @@ done in this repository.
 - [x] Locate the engine binary; refuse by name when missing - M1
 - [x] Report the installed zapret2 version - M1
 - [x] Check for LuaJIT 2.1+ / Lua 5.3+ before anything else - M2
-- [ ] Engine installation on Linux: the pinned upstream release, hash-checked, installed after a
+- [x] Engine installation on Linux: the pinned upstream release, hash-checked, installed after a
       polkit prompt - M2
-- [ ] Engine installation on Windows - M3
+- [x] Engine installation on Windows - M3
 - [x] Linux distro detection from `ID`/`ID_LIKE`; shown in advanced mode, no longer needed to
       install the engine - M2
 - [x] First-run wizard: detect, check, auto-configure, save, re-runnable later - M2
@@ -43,8 +43,8 @@ done in this repository.
 - [x] Linux systemd unit with a restricted capability set - M0
 - [x] Linux polkit action for enabling/disabling the service - M0
 - [x] Linux install and uninstall scripts - M0
-- [ ] Windows Service, installed by one UAC-elevated step - M3
-- [ ] Windows named-pipe ACL restricted to the installing user's group - M3 *(release blocker)*
+- [x] Windows Service, installed by one UAC-elevated step - M3
+- [x] Windows named-pipe ACL restricted to the installing user - M3
 - [ ] BSD rc.d service script - M5
 - [x] Service control from the GUI: enable/disable at boot, start/stop now - M1
 
@@ -60,7 +60,7 @@ done in this repository.
 - [x] Real `EngineStatus`: pid, started_at, engine version, last error - M1
 - [x] Surface uptime, pid and engine version in the GUI - M1
 - [x] Start on boot with the last non-ephemeral config - M1
-- [ ] `winws2` backend for the same `Config` - M3
+- [x] `winws2` backend for the same `Config` - M3
 - [ ] `dvtws2` backend for FreeBSD and OpenBSD - M5
 
 ## Logging & diagnostics
@@ -89,21 +89,21 @@ done in this repository.
 - [x] Config names validated before reaching the filesystem - M0
 - [x] No telemetry, of any kind, opt-in or otherwise - M0
 - [ ] Warn before enabling sync that a config reveals which sites the user visits - M4
-- [ ] Sign all binaries and installers - M3
-- [ ] Publish checksums and a verification procedure - M3
+- [ ] Sign all binaries and installers - M3. The pipeline is wired and waits on a certificate; releases are unsigned until then
+- [x] Publish checksums and a verification procedure - M3
 
 ## Platform friction
 
 - [x] AppArmor and SELinux profiles for the Linux daemon - M1
 - [ ] Non-systemd init support - deferred until requested
 - [ ] iptables fallback for kernels older than 5.15 - deferred until requested
-- [ ] AV false-positive submissions to the major vendors - M3, started before release
+- [x] AV false-positive submission process, documented in [av-submission.md](av-submission.md) - M3
 - [ ] Keep the Lua function registry in step with upstream releases - ongoing
 
 ## Packaging & distribution
 
 - [ ] Flatpak, AUR, deb repo, AppImage - ongoing
-- [ ] winget, Chocolatey - M3
+- [x] winget, Chocolatey packages built per release - M3. Published by hand until the accounts exist
 - [ ] FreeBSD and OpenBSD ports - M5
 
 ## Project & process

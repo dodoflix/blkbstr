@@ -74,7 +74,18 @@ puts the installed one back.
 The wizard's engine install runs `pkexec /usr/local/libexec/blkbstrd install-engine`, so it needs
 `install.sh` to have run (the binary and the polkit action); `dev:daemon` alone does not provide them.
 
-Windows and the BSDs have no service installer yet; see [platform-notes.md](platform-notes.md).
+On Windows, build the daemon once so the GUI crate has its sidecar, then run the app:
+
+```powershell
+packaging/windows/stage-daemon.ps1
+npm install; npm run tauri dev
+```
+
+To work on the daemon without installing a service, run `cargo run -p blkbstr-daemon` from an
+elevated terminal (WinDivert needs administrator rights). The pipe then keeps its default access, so
+only your account can reach it. The installed service refuses to register from outside Program Files.
+
+The BSDs have no service installer yet; see [platform-notes.md](platform-notes.md).
 
 ## Taskbar icon in `tauri dev`
 

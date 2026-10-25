@@ -42,20 +42,53 @@ explicitly rather than letting the user read a stack trace.
 ## Windows
 
 **WinDivert.** A signed kernel driver. Loading it needs administrator rights and the signature has
-to stay valid - a driver-signing lapse breaks every install at once.
+to stay valid - a driver-signing lapse breaks every install at once. It ships in upstream's zip next
+to `winws2.exe`, and the wizard installs both into `%ProgramFiles%\zapret2`.
 
-**No firewall rules.** `winws2` builds its own WinDivert filter from the profile filters, so there
-is nothing to install or tear down. The whole `firewall.rs` problem does not exist here, which
-makes Windows the smaller half of the engine work despite the driver and signing overhead.
+**No firewall rules.** `winws2` builds its own WinDivert filter from `--wf-tcp-out` and
+`--wf-udp-out`, which the renderer writes from the ports the enabled strategies select. There is
+nothing to install or tear down, so `firewall.rs` is Linux-only in practice. Only outgoing ports
+are named: SYN+ACK, FIN and RST come back on their own, and WinDivert cannot limit interception to
+a flow's first packets the way conntrack does, so intercepting every incoming segment of a download
+is CPU spent for nothing. A strategy that needs incoming data would need `--wf-tcp-in`.
+
+**Stopping restores the machine.** The engine's filter dies with its process, and the daemon puts
+the engine in a job object that kills it when the daemon goes, however that happens. Without that a
+killed daemon leaves `winws2` running, and the next start is refused as a duplicate of the same
+WinDivert filter.
+
+**A Cygwin program.** `winws2.exe` needs `cygwin1.dll` beside it, and it reads paths its own way, so
+every path in a parameter file is written with forward slashes (`C:/ProgramData/...`). After
+starting it lowers its own integrity level; it creates and labels its log file first, which is why
+the log directory only has to be writable by the service. LuaJIT is linked in, so the wizard does not
+look for a Lua runtime or nftables on Windows.
 
 **Antivirus.** Anti-censorship tools get flagged as malware routinely: they inject packets, spoof
 TTLs and load a network driver, which is a fair description of malware if you are a heuristic. The
-false-positive submission process to the major vendors starts *before* the M3 release. Assume at
-least one vendor flags it anyway and document the exclusion steps.
+submission process and the exclusion steps for users are in [av-submission.md](av-submission.md).
+Assume at least one vendor flags it anyway. Releases are unsigned for now, which makes that
+likelier and means SmartScreen warns on first run.
 
-**Service.** One UAC-elevated installer step registers the Windows Service. The GUI then talks to
-it over a named pipe whose ACL must be restricted to the installing user's group - not yet
-implemented, and a release blocker for M3.
+**Service.** `blkbstrd install-service --allow-sid <SID>`, run elevated by the GUI in one UAC
+prompt, registers an auto-start service as SYSTEM, restarts it after a crash, and does three things
+that decide who can reach SYSTEM:
+
+- It refuses unless the binary is under Program Files, where only administrators can replace it.
+- It resets the owner and every entry on `C:\ProgramData\blkbstr`, so a directory a user created
+  there first cannot feed the service a config. Users may read it; the GUI tails logs from there.
+- It sets the service's own access list so the installing user can start and stop the helper
+  without a prompt, and nothing more. Change-config is withheld on purpose: it lets its holder
+  repoint the service at any binary.
+
+The named pipe admits SYSTEM and that one user, and refuses remote clients. Changing the start type
+(the "Start at boot" switch) needs administrator rights and prompts each time.
+
+**Uninstall.** The installer's hooks stop the service before an upgrade replaces `blkbstrd.exe`,
+remove it on uninstall and delete `C:\ProgramData\blkbstr`. The engine in Program Files stays: it
+was installed by the wizard, not by the installer.
+
+**Windows on ARM.** Not offered. Upstream's answer is the x64 build with a test-signed driver and
+Test Signing mode switched on, which is not something to do behind a button.
 
 ## FreeBSD and OpenBSD
 

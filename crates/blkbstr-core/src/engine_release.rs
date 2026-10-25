@@ -1,32 +1,68 @@
 //! The zapret2 release Blockbuster installs. Pinned with its hash because the file ends up
-//! executing as root: whoever can change what this downloads can run code on the machine.
+//! executing as root (or SYSTEM): whoever can change what this downloads can run code on the machine.
+
+use std::path::PathBuf;
 
 pub const VERSION: &str = "1.0.5.2";
+/// The `.tar.gz` that Unix installs from.
 pub const SHA256: &str = "fb3bcf69e7d86b9fa2d60bd53c956ac06d9dcc3adf9392afd84865f1d94b1158";
+/// The `.zip` that Windows installs from; upstream ships the Windows binaries only in this one.
+pub const ZIP_SHA256: &str = "f585590bea6da82ac2c74926f6ac17e6204ee8b53e455c2ba2edae0c58c5d4ac";
 
-/// Where it is unpacked. Matches the upstream layout, which `detect::locate_engine` and
-/// `detect::locate_lua_dir` already search.
+/// Where it is unpacked on Unix. Matches the upstream layout, which `detect::locate_engine` and
+/// `detect::locate_lua_dir` already search. Use [`install_dir`] to get the right one for this OS.
 pub const INSTALL_DIR: &str = "/opt/zapret2";
+
+/// Where the engine is unpacked on this OS. On Windows that is under Program Files, which only
+/// administrators can write: the service runs whatever is there as SYSTEM.
+pub fn install_dir() -> PathBuf {
+    if cfg!(windows) {
+        std::env::var_os("ProgramFiles")
+            .map_or_else(|| PathBuf::from(r"C:\Program Files"), PathBuf::from)
+            .join("zapret2")
+    } else {
+        PathBuf::from(INSTALL_DIR)
+    }
+}
+
+/// The archive this OS installs from, and the hash it must have.
+pub fn archive_name() -> String {
+    let ext = if cfg!(windows) { "zip" } else { "tar.gz" };
+    format!("zapret2-v{VERSION}.{ext}")
+}
+
+pub fn sha256() -> &'static str {
+    if cfg!(windows) {
+        ZIP_SHA256
+    } else {
+        SHA256
+    }
+}
 
 pub fn url() -> String {
     format!(
-        "https://github.com/bol-van/zapret2/releases/download/v{VERSION}/zapret2-v{VERSION}.tar.gz"
+        "https://github.com/bol-van/zapret2/releases/download/v{VERSION}/{}",
+        archive_name()
     )
 }
 
-/// The top-level directory inside the tarball.
+/// The top-level directory inside the archive.
 pub fn archive_root() -> String {
     format!("zapret2-v{VERSION}")
 }
 
-/// The tarball's `binaries/` subdirectory for this CPU, or `None` when upstream ships nothing for it.
+/// The archive's `binaries/` subdirectory for this CPU, or `None` when upstream ships nothing for it.
+/// Windows on ARM is `None` on purpose: upstream's answer is the x64 build with a test-signed
+/// driver, which is not something to install behind a button.
 pub fn binary_dir() -> Option<&'static str> {
-    match std::env::consts::ARCH {
-        "x86_64" => Some("linux-x86_64"),
-        "aarch64" => Some("linux-arm64"),
-        "x86" => Some("linux-x86"),
-        "arm" => Some("linux-arm"),
-        "riscv64" => Some("linux-riscv64"),
+    match (cfg!(windows), std::env::consts::ARCH) {
+        (true, "x86_64") => Some("windows-x86_64"),
+        (true, "x86") => Some("windows-x86"),
+        (false, "x86_64") => Some("linux-x86_64"),
+        (false, "aarch64") => Some("linux-arm64"),
+        (false, "x86") => Some("linux-x86"),
+        (false, "arm") => Some("linux-arm"),
+        (false, "riscv64") => Some("linux-riscv64"),
         _ => None,
     }
 }

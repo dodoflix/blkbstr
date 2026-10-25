@@ -34,7 +34,7 @@ user program that can only ask it for four things.
 
 The boundary is also the permission model. Access to the socket *is* the authorisation: on Linux
 the socket is `0660` owned by the `blkbstr` group, and being in that group is what lets you drive
-the engine. No repeated `sudo`, no password prompt per toggle, and a clear thing to revoke.
+the engine; on Windows the pipe admits SYSTEM and the one user who installed the service. No repeated `sudo`, no password prompt per toggle, and a clear thing to revoke.
 
 **What needs elevation:** starting and stopping the engine, changing firewall rules, installing or
 removing the service, installing the engine. **What does not:** reading status, reading logs, and everything to do with
@@ -46,7 +46,7 @@ user's own directory and are only handed to the daemon at the moment of starting
 | Path | Crate | Contents |
 | --- | --- | --- |
 | `crates/blkbstr-core` | `blkbstr-core` | `Config`, the Lua function registry and `lint`, the parameter-file renderer, the wire protocol, shared paths, environment detection, the reachability check, the auto-configuration candidates, the zapret2 config importer and the pinned engine release |
-| `crates/blkbstr-daemon` | `blkbstr-daemon` (bin `blkbstrd`) | Socket server, engine supervision, nftables interception, the `install-engine` one-shot |
+| `crates/blkbstr-daemon` | `blkbstr-daemon` (bin `blkbstrd`) | Socket server, engine supervision, nftables interception, the `install-engine` one-shot, and on Windows the service, pipe access list and engine job object |
 | `src-tauri` | `blkbstr` | Tauri commands, daemon client, config file CRUD, engine download, `Legacy` import |
 | `src` | - | React frontend |
 
@@ -99,6 +99,15 @@ This is deliberately not a socket request: the socket is open to the whole `blkb
 carries four operations, and writing an executable that later runs as root deserves its own prompt.
 The hash is the whole trust boundary, since the file sits in a user-writable directory until the
 daemon has read it.
+
+### On Windows
+
+Same flow, with the firewall step removed. `render.rs` writes `--wf-tcp-out` and `--wf-udp-out`
+into the parameter file from the same port list the nftables rules use, and `winws2` installs its
+own WinDivert filter when it starts. The daemon runs as a Windows service (`winservice.rs`), puts
+the engine in a job object that dies with it (`job.rs`), and the engine is installed from upstream's
+zip by `blkbstrd install-engine` behind a UAC prompt instead of `pkexec`. The GUI reaches the
+elevated steps through `elevate.rs`. Platform details are in [platform-notes.md](platform-notes.md).
 
 ## Supervision
 
