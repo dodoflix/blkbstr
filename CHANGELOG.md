@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/dodoflix/blkbstr/compare/v0.1.0...v0.1.1) (2026-10-25)
+
+
+### Bug fixes
+
+* **daemon:** look for the engine again after startup ([#47](https://github.com/dodoflix/blkbstr/issues/47)) ([14f04ba](https://github.com/dodoflix/blkbstr/commit/14f04ba7d074d24002cf0dbcd9c4721a4de89cd8))
+
 ## 0.1.0 (2026-10-25)
 
 
