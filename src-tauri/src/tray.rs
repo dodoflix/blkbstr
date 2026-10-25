@@ -156,9 +156,10 @@ fn refresh(app: &AppHandle) {
 /// Grey and half transparent: "off" reads without a colour.
 fn dimmed(icon: &Image<'_>) -> Image<'static> {
     let mut rgba = icon.rgba().to_vec();
-    for p in rgba.chunks_exact_mut(4) {
-        let grey = ((u16::from(p[0]) + u16::from(p[1]) + u16::from(p[2])) / 3) as u8;
-        p.copy_from_slice(&[grey, grey, grey, p[3] / 2]);
+    for i in (0..rgba.len()).step_by(4) {
+        let sum = u16::from(rgba[i]) + u16::from(rgba[i + 1]) + u16::from(rgba[i + 2]);
+        rgba[i..i + 3].fill((sum / 3) as u8);
+        rgba[i + 3] /= 2;
     }
     Image::new_owned(rgba, icon.width(), icon.height())
 }
