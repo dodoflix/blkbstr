@@ -8,8 +8,8 @@ Releases are made by [Release Please](https://github.com/googleapis/release-plea
 2. Release Please keeps one open pull request, "chore(main): release x.y.z", with the next version
    and the changelog it generated from those commits.
 3. Merging that pull request tags `vx.y.z` and publishes the GitHub release. The same workflow then
-   builds the Linux packages and `blkbstrd` and attaches them, with `SHA256SUMS`, to that release,
-   and in parallel builds the Windows installer and attaches it.
+   builds the Linux packages and `blkbstrd` and attaches them to that release, and in parallel
+   builds the Windows installer and attaches it.
 
 `feat` bumps the minor version, `fix` and `perf` the patch, and `feat!` or a `BREAKING CHANGE:`
 footer the major. While the version is below 1.0 a breaking change bumps the minor. `docs`,
@@ -21,22 +21,12 @@ they cannot drift: `Cargo.toml` (`[workspace.package]`, plus the matching entrie
 
 ## Signing
 
-Artefacts carry a [build provenance attestation](https://docs.github.com/actions/security-guides/using-artifact-attestations)
-(Sigstore-backed and keyless, so there is no signing key to lose), and each file is tied to the
-commit and workflow run that produced it:
-
-```sh
-gh attestation verify blkbstrd -R dodoflix/blkbstr
-```
-
-That is authenticity of origin, and it is the check to point people at, because "download this
-build of the tool that gets around censorship" is an effective attack on exactly the people this
-project is for.
-
-The Windows installer has none of this yet: it is neither code-signed nor attested, so SmartScreen
-warns on first run and antivirus tools are likelier to flag it ([av-submission.md](av-submission.md)).
-Signing, and the winget and Chocolatey packages, are planned (see "Ongoing" in
-[plan.md](plan.md)).
+Nothing in a release is signed or attested yet, and there are no checksums. That matters more than
+usual here: "download this build of the tool that gets around censorship" is an effective attack on
+exactly the people this project is for, so signing, checksums and build provenance attestations
+are planned (see "Ongoing" in [plan.md](plan.md)). Until then, point people only at this
+repository's releases page. On Windows, SmartScreen warns on first run and antivirus tools are
+likelier to flag the installer ([av-submission.md](av-submission.md)).
 
 ## What is not in a release
 

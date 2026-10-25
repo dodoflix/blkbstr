@@ -90,7 +90,7 @@ done in this repository.
 - [x] No telemetry, of any kind, opt-in or otherwise - M0
 - [ ] Warn before enabling sync that a config reveals which sites the user visits - M4
 - [ ] Sign all binaries and installers - ongoing (Windows installer is unsigned for now)
-- [x] Publish checksums and a verification procedure - M3
+- [ ] Publish checksums and a verification procedure - ongoing
 
 ## Platform friction
 
@@ -113,4 +113,4 @@ done in this repository.
 - [x] Contribution guidelines - M0
 - [x] Code of conduct - M0
 - [x] Issue and PR templates - M0
-- [x] Release process: tag-driven build, checksums, provenance attestation - M1
+- [x] Release process: tag-driven build that attaches the packages - M1

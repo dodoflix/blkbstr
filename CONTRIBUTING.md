@@ -74,7 +74,7 @@ or the config format changes.
 Releases are automatic and nobody edits `CHANGELOG.md` or the version files by hand. Every merge to
 `main` updates a release pull request with the next version and the changelog, both generated from
 the commit messages. Merging that pull request tags the release, publishes the notes and builds the
-Linux packages, `blkbstrd` and the Windows installer onto it with a signed provenance attestation. See
+Linux packages, `blkbstrd` and the Windows installer onto it. See
 [docs/releasing.md](docs/releasing.md).
 
 ## What the code should look like

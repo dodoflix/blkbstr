@@ -1,7 +1,7 @@
 name: Release
 
 # Release Please keeps a release PR open on main; merging it tags the release and the job below
-# attaches the Linux and Windows artefacts.
+# attaches the Linux and Windows builds.
 on:
   push:
     branches: [main]
@@ -39,9 +39,6 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: write
-      # For the provenance attestation.
-      id-token: write
-      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -78,55 +75,15 @@ jobs:
       - run: npm run tauri build
       - run: cargo build --release -p blkbstr-daemon
 
-      - name: Collect the artefacts
-        run: |
-          mkdir -p dist
-          cp target/release/blkbstrd dist/
-          find target/release/bundle -type f \
-            \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \) -exec cp {} dist/ \;
-          cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
-
-      # Keyless Sigstore attestation: ties each file to this run and commit with no key to lose.
-      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-path: |
-            dist/blkbstrd
-            dist/*.deb
-            dist/*.rpm
-            dist/*.AppImage
-
-      - name: Attach the artefacts and how to verify them to the release
+      - name: Attach the packages to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release-please.outputs.tag }}
         run: |
-          gh release view "$TAG" --json body --jq .body > notes.md
-          cat >> notes.md <<'EOF'
-
-          ### Checking what you downloaded
-
-          Anti-censorship tools are an obvious thing to impersonate, so do not take a download page
-          at its word. Every binary below carries a signed provenance attestation naming the commit
-          and workflow run that built it:
-
-          ```sh
-          gh attestation verify blkbstrd -R dodoflix/blkbstr
-          ```
-
-          `SHA256SUMS` covers the same files:
-
-          ```sh
-          sha256sum -c SHA256SUMS
-          ```
-
-          The Windows installer is not code-signed and has no attestation, so SmartScreen will warn
-          about it on first run.
-
-          The zapret2 engine is not in here and is versioned separately: Blockbuster drives
-          whichever one you have installed.
-          EOF
-          gh release edit "$TAG" --notes-file notes.md
-          gh release upload "$TAG" dist/* --clobber
+          files=(target/release/blkbstrd)
+          while IFS= read -r f; do files+=("$f"); done < <(
+            find target/release/bundle -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \))
+          gh release upload "$TAG" "${files[@]}" --clobber
 
   windows:
     needs: release-please

@@ -128,8 +128,8 @@ Extension *and* a packet manipulator that does not exist upstream. That is a dif
 
 ### Ongoing
 
-Distribution packaging (Flatpak, AUR, deb repo, ports, winget, Chocolatey), Authenticode signing of
-the Windows installer and binaries, contribution docs, and keeping the Lua
+Distribution packaging (Flatpak, AUR, deb repo, ports, winget, Chocolatey), signing, checksums and
+provenance attestations for the release artefacts, contribution docs, and keeping the Lua
 function registry in step as upstream zapret2 gains and loses functions.
 
 ## Standing constraints
