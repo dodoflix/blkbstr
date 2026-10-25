@@ -41,7 +41,10 @@ type EngineSlot = Mutex<Result<Engine, String>>;
 fn main() -> Result<()> {
     let mut argv = std::env::args().skip(1);
     match argv.next().as_deref() {
-        Some("install-engine") => return install_engine(argv.next()),
+        Some("install-engine") => {
+            let _log_guard = init_logging();
+            return install_engine(argv.next());
+        }
         #[cfg(windows)]
         Some("install-service") => return winservice::install(&Args::parse(argv)),
         #[cfg(windows)]
@@ -96,7 +99,12 @@ fn run(args: &Args, ready: impl FnOnce(Arc<EngineSlot>) -> Result<()>) -> Result
 /// Not the service: a one-shot the GUI runs through `pkexec`, so it has no socket and no engine.
 fn install_engine(tarball: Option<String>) -> Result<()> {
     let tarball = tarball.context("usage: blkbstrd install-engine <archive>")?;
+    tracing::info!(archive = %tarball, "installing the engine");
     let result = unpack_engine(&tarball);
+    match &result {
+        Ok(()) => tracing::info!("engine installed"),
+        Err(e) => tracing::error!(error = %format!("{e:#}"), "installing the engine failed"),
+    }
     // UAC gives the GUI no way to read this process's output, so the reason goes in a file next to
     // the archive for it to pick up.
     #[cfg(windows)]
@@ -213,6 +221,11 @@ fn init_logging() -> Option<tracing_appender::non_blocking::WorkerGuard> {
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
     let filter = EnvFilter::try_from_env("BLKBSTR_LOG").unwrap_or_else(|_| EnvFilter::new("info"));
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        tracing::error!(panic = %info, "blkbstrd panicked");
+        previous(info);
+    }));
     let stderr = fmt::layer().with_writer(std::io::stderr);
 
     // A daemon that cannot write its log file still has to run; the service manager captures

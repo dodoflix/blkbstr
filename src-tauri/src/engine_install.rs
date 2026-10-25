@@ -20,8 +20,20 @@ pub fn install() -> Result<(), String> {
     std::fs::create_dir_all(&dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
     let tarball = dir.join(engine_release::archive_name());
 
-    let result = download(&tarball).and_then(|()| unpack_as_root(&tarball));
+    tracing::info!(url = %engine_release::url(), "downloading zapret2");
+    let result = download(&tarball).and_then(|()| {
+        let size = std::fs::metadata(&tarball).map_or(0, |m| m.len());
+        tracing::info!(
+            size,
+            "downloaded zapret2; asking for permission to install it"
+        );
+        unpack_as_root(&tarball)
+    });
     std::fs::remove_file(&tarball).ok();
+    match &result {
+        Ok(()) => tracing::info!("zapret2 installed"),
+        Err(e) => tracing::error!(error = %e, "installing zapret2 failed"),
+    }
     result
 }
 

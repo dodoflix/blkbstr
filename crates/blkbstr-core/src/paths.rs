@@ -97,6 +97,11 @@ pub fn log_dir() -> PathBuf {
     }
 }
 
+/// The app's own log, per user: the daemon's directory is system-wide and not writable by the GUI.
+pub fn app_log_dir() -> Option<PathBuf> {
+    dirs().map(|d| d.data_local_dir().join("logs"))
+}
+
 /// A path as it goes into a parameter file. winws2 is a Cygwin program, so it reads `C:/dir/file`
 /// where a native path with backslashes is not guaranteed to survive its option parser.
 pub fn for_engine(path: &Path) -> String {
