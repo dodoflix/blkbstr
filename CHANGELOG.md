@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0](https://github.com/dodoflix/blkbstr/compare/v0.1.1...v0.2.0) (2026-10-25)
+
+
+### Features
+
+* check for app updates on start and every six hours ([#49](https://github.com/dodoflix/blkbstr/issues/49)) ([c3fcdad](https://github.com/dodoflix/blkbstr/commit/c3fcdadce8d8bcdfc9dea87d7bc476e437942a14))
+* keep an app log and record panics, elevation and install steps ([#52](https://github.com/dodoflix/blkbstr/issues/52)) ([e7c0cdc](https://github.com/dodoflix/blkbstr/commit/e7c0cdc901c6e5c1fc3517f2e51ef8bac94c8dfa))
+* notify about app updates and stay in the tray when the window is closed ([#53](https://github.com/dodoflix/blkbstr/issues/53)) ([2b070a8](https://github.com/dodoflix/blkbstr/commit/2b070a8c16a2fdc5fb9035be5069c26f6f98232f))
+
+
+### Bug fixes
+
+* show why the elevated engine install failed on Windows ([#50](https://github.com/dodoflix/blkbstr/issues/50)) ([550c995](https://github.com/dodoflix/blkbstr/commit/550c9951d5bc10a5505bd0efa2206a1906cba77a))
+
 ## [0.1.1](https://github.com/dodoflix/blkbstr/compare/v0.1.0...v0.1.1) (2026-10-25)
 
 
