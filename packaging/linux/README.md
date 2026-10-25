@@ -1,7 +1,7 @@
 # Linux packaging
 
 `install.sh` puts the daemon at `/usr/local/libexec/blkbstrd`, installs the systemd unit and the
-polkit action, creates the `blkbstr` group and adds the invoking user to it. `uninstall.sh` removes
+polkit actions, creates the `blkbstr` group and adds the invoking user to it. `uninstall.sh` removes
 all of it except the group, which it keeps so that reinstalling does not hand out a new GID and cost
 the user another logout; `groupdel blkbstr` finishes the job.
 
@@ -69,3 +69,14 @@ GUI in a confined domain. On a stock desktop the GUI is `unconfined_t` and alrea
 
 `install.sh` refuses rather than producing a broken install. Supporting OpenRC or runit means a
 second unit format and a second way to find the socket; it waits until someone asks.
+
+## Installing the engine
+
+The GUI offers to install zapret2 itself: it downloads the pinned release, then runs
+`pkexec /usr/local/libexec/blkbstrd install-engine <file>`. The `dev.blkbstr.install-engine` polkit
+action makes that prompt for a password every time. `blkbstrd` checks the file against the pinned
+SHA-256 and writes only `nfqws2` and `lua/` into `/opt/zapret2`; an existing `config` there is never
+touched. `uninstall.sh` leaves `/opt/zapret2` in place.
+
+Re-run `install.sh` after upgrading from a build that predates this, or the polkit action is missing
+and `pkexec` refuses.

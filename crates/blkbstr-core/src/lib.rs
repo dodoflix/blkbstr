@@ -3,6 +3,8 @@
 pub mod candidates;
 pub mod config;
 pub mod detect;
+pub mod engine_release;
+pub mod legacy;
 pub mod paths;
 pub mod protocol;
 pub mod reachability;

@@ -22,7 +22,9 @@ import {
   type State,
   useMediaQuery,
   type Step,
+  useToast,
 } from "../ui";
+import * as api from "../api";
 import { useBackend } from "./backend";
 import { impactLabel, plainImpact, useAutoConfig, type AutoConfig } from "./autoconfig";
 import { plural } from "./format";
@@ -58,10 +60,45 @@ function requirement({ state, title, detail, action }: { state: State; title: st
 }
 
 function ComputerStep({ onNext }: { onNext: () => void }) {
-  const { env, daemon, refresh, refreshEnv } = useBackend();
+  const { env, daemon, refresh, refreshEnv, refreshConfigs } = useBackend();
   const { advanced } = usePrefs();
+  const toast = useToast();
   const [checking, setChecking] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [installError, setInstallError] = useState<string>();
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string>();
+  const [imported, setImported] = useState<api.LegacyImport>();
   if (!env || !daemon) return <Progress indeterminate label="Looking at this computer" />;
+
+  const canInstall = env.platform === "linux";
+
+  async function install() {
+    setInstalling(true);
+    setInstallError(undefined);
+    try {
+      await api.installEngine();
+      await refreshEnv();
+      toast({ title: "zapret2 installed", tone: "ok" });
+    } catch (e) {
+      setInstallError(String(e));
+    } finally {
+      setInstalling(false);
+    }
+  }
+
+  async function importLegacy() {
+    setImporting(true);
+    setImportError(undefined);
+    try {
+      setImported(await api.importLegacy());
+      await refreshConfigs();
+    } catch (e) {
+      setImportError(String(e));
+    } finally {
+      setImporting(false);
+    }
+  }
 
   const rows = [
     requirement({
@@ -70,9 +107,23 @@ function ComputerStep({ onNext }: { onNext: () => void }) {
       detail: daemon.reachable ? `Running${advanced ? `, version ${daemon.version}` : ""}` : "Not running. Install it once, then check again.",
     }),
     requirement({
-      state: env.engine ? "ok" : "fail",
+      state: env.engine ? "ok" : installing ? "busy" : "fail",
       title: "zapret2 engine",
-      detail: env.engine ? (advanced ? `${env.engine.version ?? "found"} at ${env.engine.path}` : "Installed") : "Not installed. Put nfqws2 on your PATH or in /opt/zapret2.",
+      detail: env.engine
+        ? advanced ? `${env.engine.version ?? "found"} at ${env.engine.path}` : "Installed"
+        : installing
+          ? "Downloading zapret2, then asking for your password to install it."
+          : !canInstall
+            ? "Not installed. Put nfqws2 on your PATH or in /opt/zapret2."
+            : daemon.reachable
+              ? "Not installed. Blockbuster downloads the official release and installs it in /opt/zapret2. You will be asked for your password."
+              : "Not installed. Install the background helper first, then Blockbuster can install this for you.",
+      action:
+        !env.engine && canInstall ? (
+          <Button size="sm" icon="download" loading={installing} disabled={!daemon.reachable} onClick={() => void install()}>
+            {installError ? "Try again" : "Install"}
+          </Button>
+        ) : undefined,
     }),
     requirement({
       state: env.lua?.supported ? "ok" : "fail",
@@ -91,9 +142,37 @@ function ComputerStep({ onNext }: { onNext: () => void }) {
     <Stack gap={5}>
       <RowList label="Requirements" items={rows} />
       {!daemon.reachable && <CodeBlock code="packaging/linux/install.sh" title="Install the helper" />}
-      {env.existing_install && (
-        <Notice tone="neutral" title="An existing zapret2 install was found">
-          {env.existing_install}. Blockbuster leaves it alone.
+      {installError && (
+        <Notice tone="danger" title="The engine did not install">
+          {installError}
+        </Notice>
+      )}
+      {env.existing_install && !imported && (
+        <Notice
+          tone="neutral"
+          title="An existing zapret2 install was found"
+          action={
+            <Button size="sm" variant="soft" tone="neutral" icon="download" loading={importing} onClick={() => void importLegacy()}>
+              Import as Legacy
+            </Button>
+          }
+        >
+          <Text mono>{env.existing_install}</Text> stays as it is. Importing copies its config aside first and saves your strategies as a config named Legacy.
+        </Notice>
+      )}
+      {importError && (
+        <Notice tone="danger" title="That install could not be imported">
+          {importError}
+        </Notice>
+      )}
+      {imported && (
+        <Notice tone="ok" title={`Imported as ${imported.name}`}>
+          Your original config is backed up at <Text mono>{imported.backup}</Text>.
+          {imported.skipped.length > 0 && (
+            <Disclosure summary={`${plural(imported.skipped.length, "option")} not imported`}>
+              <CodeBlock code={imported.skipped.join("\n")} copyable={false} />
+            </Disclosure>
+          )}
         </Notice>
       )}
       {advanced && env.distro && (

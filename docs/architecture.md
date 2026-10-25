@@ -1,5 +1,8 @@
 # Architecture
 
+How the GUI, the privileged daemon and the engine fit together, and why the privileged work is a
+separate process.
+
 ## The split
 
 ```
@@ -34,7 +37,7 @@ the socket is `0660` owned by the `blkbstr` group, and being in that group is wh
 the engine. No repeated `sudo`, no password prompt per toggle, and a clear thing to revoke.
 
 **What needs elevation:** starting and stopping the engine, changing firewall rules, installing or
-removing the service. **What does not:** reading status, reading logs, and everything to do with
+removing the service, installing the engine. **What does not:** reading status, reading logs, and everything to do with
 configs - creating, editing, validating, linting, importing, syncing. Config files live in the
 user's own directory and are only handed to the daemon at the moment of starting.
 
@@ -42,9 +45,9 @@ user's own directory and are only handed to the daemon at the moment of starting
 
 | Path | Crate | Contents |
 | --- | --- | --- |
-| `crates/blkbstr-core` | `blkbstr-core` | `Config`, the Lua function registry and `lint`, the parameter-file renderer, the wire protocol, shared paths |
-| `crates/blkbstr-daemon` | `blkbstr-daemon` (bin `blkbstrd`) | Socket server, engine supervision, nftables interception |
-| `src-tauri` | `blkbstr` | Tauri commands, daemon client, config file CRUD |
+| `crates/blkbstr-core` | `blkbstr-core` | `Config`, the Lua function registry and `lint`, the parameter-file renderer, the wire protocol, shared paths, environment detection, the reachability check, the auto-configuration candidates, the zapret2 config importer and the pinned engine release |
+| `crates/blkbstr-daemon` | `blkbstr-daemon` (bin `blkbstrd`) | Socket server, engine supervision, nftables interception, the `install-engine` one-shot |
+| `src-tauri` | `blkbstr` | Tauri commands, daemon client, config file CRUD, engine download, `Legacy` import |
 | `src` | - | React frontend |
 
 ## Request flow
@@ -65,6 +68,37 @@ Starting the engine, end to end:
 Teardown reverses it: rules first, then the process. The `Firewall` value also removes the table on
 `Drop`, and the daemon clears a stale table at startup, so the three ways of dying - clean stop,
 panic, SIGKILL - all end with the machine as it was.
+
+## Onboarding
+
+Everything the setup wizard learns before a daemon exists is local and unprivileged, so it works on
+a machine where nothing is installed yet.
+
+- **Detect** (`detect.rs`) reports the engine, the Lua runtime and its version, nftables, the distro
+  and any existing zapret2 tree. "Not found" is a normal answer, not an error.
+- **Reachability** (`reachability.rs`) probes a list of commonly blocked hosts and gives each a
+  verdict: DNS answered wrongly, TCP blocked, TLS reset, TLS silent, or fine. Nothing is uploaded.
+- **Auto-configuration** walks `candidates::ranked()`, cheapest first. The walk runs in the UI:
+  each step is an ordinary ephemeral start, a reachability check and a stop. The daemon's
+  confirm-or-revert deadline, not the GUI, is what restores the machine if the window dies mid-walk.
+- **Import** (`legacy.rs`) turns an existing zapret2 `config` into a `Config`. See
+  [config-format.md](config-format.md#importing-from-zapret2).
+
+### Installing the engine
+
+zapret2 is not part of Blockbuster. `engine_release.rs` pins one upstream release by version and
+SHA-256, and the wizard installs it on request:
+
+1. The GUI downloads the tarball with `curl` into its cache directory, as the user.
+2. It runs `pkexec /usr/local/libexec/blkbstrd install-engine <file>`. The polkit action always
+   asks for a password.
+3. `blkbstrd` reads the file once, checks the hash of those bytes, and writes only `nfqws2` and
+   `lua/` into `/opt/zapret2`, each renamed into place. It never writes a `config`.
+
+This is deliberately not a socket request: the socket is open to the whole `blkbstr` group and
+carries four operations, and writing an executable that later runs as root deserves its own prompt.
+The hash is the whole trust boundary, since the file sits in a user-writable directory until the
+daemon has read it.
 
 ## Supervision
 

@@ -81,6 +81,20 @@ export type Environment = {
 export const detectEnvironment = () =>
   invoke<Environment>("detect_environment");
 
+/** Downloads the pinned zapret2 release and installs it after a polkit prompt. Resolves once it is in place. */
+export const installEngine = () => invoke<void>("install_engine");
+
+export type LegacyImport = {
+  /** The name the config was saved under. */
+  name: string;
+  /** Where the original zapret2 config was copied. */
+  backup: string;
+  /** Options that did not map onto a config, verbatim. */
+  skipped: string[];
+};
+
+export const importLegacy = () => invoke<LegacyImport>("import_legacy");
+
 export type Verdict =
   | "fine"
   | "dns_failed"

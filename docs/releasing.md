@@ -38,5 +38,6 @@ effective attack on exactly the people this project is for.
 
 ## What is not in a release
 
-The engine. zapret2 is installed separately and versioned separately; a version here says nothing
-about which upstream version is running.
+The engine. Each build pins one upstream zapret2 release in `engine_release.rs` (version and
+SHA-256) and installs it on demand, but does not contain it. Bumping the pin means updating both
+values and checking `NFQWS2_COMPAT_VER` against the new release.

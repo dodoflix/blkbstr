@@ -1,4 +1,4 @@
-/** Dev-only stand-in for the Tauri backend. Pick a scenario with ?mock=fresh|ready|nodaemon|noengine|biglog. */
+/** Dev-only stand-in for the Tauri backend. Pick a scenario with ?mock=fresh|ready|nodaemon|noengine|legacy|biglog. */
 import type { Config, EngineStatus, Report, SiteResult, Verdict } from "./api";
 
 const scenario = new URLSearchParams(location.search).get("mock") ?? "fresh";
@@ -34,6 +34,8 @@ const HOSTS = ["discord.com", "youtube.com", "x.com", "signal.org", "soundcloud.
 const saved = new Map<string, Config>((scenario === "ready" || scenario === "biglog") ? [["fake-badsum", { ...CANDIDATES[3].config, name: "fake-badsum" }], ["multisplit-pos1", CANDIDATES[0].config]] : []);
 let running: { config: Config; ephemeral: boolean; startedAt: number; revertAt?: number } | undefined =
   (scenario === "ready" || scenario === "biglog") ? { config: saved.get("fake-badsum")!, ephemeral: false, startedAt: Math.floor(Date.now() / 1000) - 5400 } : undefined;
+
+let engineInstalled = scenario !== "noengine";
 
 const fixesFor = (name?: string) => (name?.startsWith("fake") ? 1 : name?.startsWith("multisplit") ? 0.5 : 0);
 
@@ -88,10 +90,26 @@ export async function mock<T>(cmd: string, args: Record<string, unknown> = {}): 
       return out({
         platform: "linux",
         distro: { id: "arch", pretty_name: "CachyOS", package_manager: "pacman" },
-        engine: scenario === "noengine" ? undefined : { path: "/opt/zapret2/nfqws2", version: "v0.9.2" },
+        engine: engineInstalled ? { path: "/opt/zapret2/nfqws2", version: "v0.9.2" } : undefined,
+        existing_install: scenario === "legacy" || scenario === "noengine" ? "/opt/zapret2" : undefined,
         lua: { path: "/usr/bin/luajit", version: "LuaJIT 2.1.0", flavour: "luajit", major: 2, minor: 1, supported: true },
         nftables: { path: "/usr/bin/nft", version: "nftables v1.1.1" },
       });
+    case "install_engine":
+      await sleep(2200);
+      if (scenario === "noengine" && new URLSearchParams(location.search).has("fail")) throw "the authorisation prompt was dismissed";
+      engineInstalled = true;
+      return out(undefined);
+    case "import_legacy": {
+      await sleep(400);
+      const config = cfg("Legacy", "Imported from /opt/zapret2/config", "multisplit");
+      saved.set("Legacy", config);
+      return out({
+        name: "Legacy",
+        backup: "/home/user/.config/blkbstr/backups/zapret2-config-1790000000",
+        skipped: scenario === "legacy" ? ["--ctrack-timeouts=1", "<HOSTLIST> (list selection is not imported)"] : [],
+      });
+    }
     case "check_reachability":
       return out(await reachability(args.hosts as string[] | undefined));
     case "autoconfig_candidates":

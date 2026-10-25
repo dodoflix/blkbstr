@@ -1,5 +1,7 @@
 # Development
 
+Building and running the app and the daemon from a checkout.
+
 ## Layout
 
 ```
@@ -7,15 +9,15 @@ src/                    React frontend (src/ui is the design system)
 src-tauri/              GUI backend: Tauri commands, daemon client, config files
 crates/blkbstr-core/    Config model, Lua function registry, parameter-file renderer, protocol
 crates/blkbstr-daemon/  blkbstrd, the privileged helper: engine supervisor and nftables
-packaging/linux/        systemd unit, polkit action, install scripts
+packaging/linux/        systemd unit, polkit actions, install scripts
 docs/                   Plan, architecture, decisions
 ```
 
 ## Building
 
 Needs Rust, Node and the [Tauri system dependencies](https://tauri.app/start/prerequisites/) for
-your platform. Running the engine additionally needs zapret2 installed (`nfqws2` on `PATH` or in
-`/opt/zapret2`), `nftables`, and LuaJIT 2.1+ or Lua 5.3+.
+your platform. Running the engine additionally needs `nftables` and LuaJIT 2.1+ or Lua 5.3+, plus
+zapret2 itself: the setup wizard installs it, or put `nfqws2` on `PATH` or in `/opt/zapret2` yourself.
 
 ```sh
 npm install
@@ -69,8 +71,10 @@ It takes over the installed service's socket and hands it to your own primary gr
 reaches it without the `blkbstr` group and without logging out. `sudo systemctl start blkbstrd`
 puts the installed one back.
 
-Windows and the BSDs have no service installer yet; see
-[docs/platform-notes.md](docs/platform-notes.md).
+The wizard's engine install runs `pkexec /usr/local/libexec/blkbstrd install-engine`, so it needs
+`install.sh` to have run (the binary and the polkit action); `dev:daemon` alone does not provide them.
+
+Windows and the BSDs have no service installer yet; see [platform-notes.md](platform-notes.md).
 
 ## Taskbar icon in `tauri dev`
 

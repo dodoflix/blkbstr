@@ -4,7 +4,7 @@ This is not legal advice. If you are unsure, ask a lawyer.
 
 ## What Blockbuster is
 
-Blockbuster is software that you run on your own computer. It is a graphical front end for [zapret2](https://github.com/bol-van/zapret2), which you install separately. It is not a VPN, a proxy or a hosted service, it routes no traffic through anyone's server, and the project ships no third-party code or content other than what is in this repository.
+Blockbuster is software that you run on your own computer. It is a graphical front end for [zapret2](https://github.com/bol-van/zapret2), which you install separately, or let Blockbuster download from upstream's own GitHub release. It is not a VPN, a proxy or a hosted service, it routes no traffic through anyone's server, and the project ships no third-party code or content other than what is in this repository. The engine is fetched from upstream at your request and is never part of this repository or its releases.
 
 ## Your responsibility
 

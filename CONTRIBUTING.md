@@ -4,7 +4,7 @@
 
 Read [docs/plan.md](docs/plan.md) for what is in scope and [docs/backlog.md](docs/backlog.md) for
 what is already planned. For anything larger than a fix, open an issue first - the milestones are
-deliberately ordered, and a good PR against M4 while M1 is unfinished is still a PR that sits.
+deliberately ordered, and a good PR against M4 while M3 is unfinished is still a PR that sits.
 
 ## Set up
 

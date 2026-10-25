@@ -115,6 +115,21 @@ The authority on whether a config actually loads is the engine's own `--intercep
 runs before touching the network stack. It checks options and file existence; it does **not**
 validate Lua, so a config can pass and still fail at runtime.
 
+## Importing from zapret2
+
+An existing zapret2 install keeps its strategies in `NFQWS2_OPT` inside its `config` file, in the
+same options Blockbuster renders. The importer (`legacy.rs`) reads that variable as text, never
+evaluating the shell, and maps it onto a config:
+
+- `--new` splits profiles; `--filter-*`, `--hostlist*` and `--ipset*` become the strategy's filter.
+- `--payload` applies to every `--lua-desync` after it, as in nfqws2, so each action carries it.
+- Anything else is reported back verbatim as not imported. `<HOSTLIST>` placeholders are dropped,
+  and called out when `MODE_FILTER` is not `none`, because the profile then matches more hosts than it did.
+
+The result goes through the same validation as any import. Before anything is saved the original
+`config` is copied to `backups/` in the user config directory, and the config is saved as `Legacy`
+(`Legacy-2` and so on if that name is taken). The install itself is never modified.
+
 ## Platform portability
 
 **A config is portable as written.** The attacks are Lua, so they do not vary by platform; only the

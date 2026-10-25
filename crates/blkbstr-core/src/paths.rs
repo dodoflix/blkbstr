@@ -43,6 +43,12 @@ pub fn backups_dir() -> Option<PathBuf> {
     config_dir().map(|d| d.join("backups"))
 }
 
+/// Where the GUI keeps a download until it is installed. Not `/tmp`: a predictable name there is a
+/// symlink away from overwriting someone's file.
+pub fn downloads_dir() -> Option<PathBuf> {
+    dirs().map(|d| d.cache_dir().join("downloads"))
+}
+
 /// Daemon state that survives a reboot (the config to bring back on boot). Root-owned, since it
 /// decides what runs as root. `BLKBSTR_STATE_DIR` overrides it.
 pub fn state_dir() -> PathBuf {

@@ -31,6 +31,8 @@ install -Dm755 "$BIN" "$LIBEXEC"
 install -Dm644 "$HERE/blkbstrd.service" /etc/systemd/system/blkbstrd.service
 install -Dm644 "$HERE/dev.blkbstr.manage-service.policy" \
     /usr/share/polkit-1/actions/dev.blkbstr.manage-service.policy
+install -Dm644 "$HERE/dev.blkbstr.install-engine.policy" \
+    /usr/share/polkit-1/actions/dev.blkbstr.install-engine.policy
 install -d -m 755 /etc/blkbstr
 printf 'BLKBSTR_GID=%s\n' "$GID" > /etc/blkbstr/daemon.env
 

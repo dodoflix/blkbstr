@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD polkit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/software/polkit/policyconfig-1.dtd">
+<policyconfig>
+  <vendor>Blockbuster</vendor>
+  <vendor_url>https://github.com/dodoflix/blkbstr</vendor_url>
+
+  <!--
+    The GUI downloads the pinned zapret2 release and runs `pkexec blkbstrd install-engine <file>`.
+    blkbstrd checks the file against the pinned hash before writing anything under /opt/zapret2.
+    Always asks for a password: this writes an executable that later runs as root.
+  -->
+  <action id="dev.blkbstr.install-engine">
+    <description>Install the zapret2 engine for Blockbuster</description>
+    <message>Authentication is required to install the zapret2 engine</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/libexec/blkbstrd</annotate>
+  </action>
+</policyconfig>

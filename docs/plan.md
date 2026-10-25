@@ -48,12 +48,12 @@ The repository this document lives in.
 - React shell with a status panel and a config list, following the OS theme.
 - Linux packaging: systemd unit with a restricted capability set, polkit action, install and
   uninstall scripts.
-- CI: build and test on all three OSes.
+- CI: build and test on Linux and Windows.
 
 Everything except the engine itself: validation, linting, transport, privilege boundary and
 packaging.
 
-### M1 - It actually works on Linux
+### M1 - It actually works on Linux *(done)*
 
 The first release that does the thing.
 
@@ -72,52 +72,54 @@ The first release that does the thing.
 **Done when:** a Linux user installs, picks a config, and blocked sites load; rebooting keeps it
 working; stopping leaves `nft list ruleset` exactly as it was before starting.
 
-### M2 - Getting to a working config without knowing anything
+### M2 - Getting to a working config without knowing anything *(done)*
 
 The onboarding half. This is where the project earns its existence.
 
-- Reachability check against a list of commonly blocked sites, with a per-site verdict
+- [x] Reachability check against a list of commonly blocked sites, with a per-site verdict
   (DNS poisoned / SNI reset / TLS blocked / fine).
-- Auto-configuration: walk a ranked list of candidate strategies, apply each in ephemeral mode,
+- [x] Auto-configuration: walk a ranked list of candidate strategies, apply each in ephemeral mode,
   re-test, keep the first that works. Save the winner under a user-chosen name.
-- First-run wizard chaining detection, install, check, auto-configure, re-runnable later from
-  the app.
-- Import an existing zapret2 installation: detect it, back the current config up somewhere the
-  user is told about, import it as a preset named `Legacy`.
-- Ephemeral "try it" mode surfaced in the UI, with an automatic revert if the user does not
+- [x] Ephemeral "try it" mode surfaced in the UI, with an automatic revert if the user does not
   confirm within a timeout.
+- [x] First-run wizard chaining detection, check, auto-configure and save, re-runnable later from
+  the app.
+- [x] Wizard installs the engine: the pinned upstream release is downloaded, checked against its
+  hash and unpacked into `/opt/zapret2` after a polkit prompt. No package manager is involved.
+- [x] Import an existing zapret2 installation: back the current config up somewhere the user is
+  told about, import it as a config named `Legacy`.
 
 **Done when:** someone who has never heard of DPI gets a working, saved, named config by clicking
 through a wizard.
 
 ### M3 - Windows
 
-- `winws2` backend for the same `Config` type. Interception is built into the process via
+- [ ] `winws2` backend for the same `Config` type. Interception is built into the process via
   WinDivert, so there are no firewall rules to install or remove - a smaller job than Linux.
-- Windows Service installed by one UAC-elevated step; GUI talks to it over a named pipe with an
+- [ ] Windows Service installed by one UAC-elevated step; GUI talks to it over a named pipe with an
   ACL restricted to the installing user.
-- Signed installer and binaries. Documented process for submitting to AV vendors, because
+- [ ] Signed installer and binaries. Documented process for submitting to AV vendors, because
   anti-censorship tooling gets false-positived as a matter of routine.
-- winget and Chocolatey packages.
+- [ ] winget and Chocolatey packages.
 
 **Done when:** the same config file works on Windows and Linux.
 
 ### M4 - Living with it
 
-- Auto-update via Tauri's updater plugin against GitHub Releases, with the *engine* updated
+- [ ] Auto-update via Tauri's updater plugin against GitHub Releases, with the *engine* updated
   separately from the *app* - they have different risk profiles and different release cadences.
-- System tray / menu bar toggle with a status indicator.
-- Config sync to a user-supplied GitHub repo, private by default, with an explicit warning that a
+- [ ] System tray / menu bar toggle with a status indicator.
+- [ ] Config sync to a user-supplied GitHub repo, private by default, with an explicit warning that a
   config reveals which sites someone visits and which strategies work in their country.
-- Localisation. Not an afterthought: the userbase is disproportionately non-English-speaking.
-- Accessibility pass - keyboard navigation, screen reader labels, contrast.
+- [ ] Localisation. Not an afterthought: the userbase is disproportionately non-English-speaking.
+- [ ] Accessibility pass - keyboard navigation, screen reader labels, contrast.
 
 ### M5 - FreeBSD and OpenBSD
 
 The cheapest platform to add, because upstream already ships `dvtws2` for it.
 
-- `dvtws2` backend, driven by the same `Config`; interception via ipfw (FreeBSD) or pf (OpenBSD).
-- rc.d service script in place of the systemd unit.
+- [ ] `dvtws2` backend, driven by the same `Config`; interception via ipfw (FreeBSD) or pf (OpenBSD).
+- [ ] rc.d service script in place of the systemd unit.
 
 There is no macOS milestone. Upstream does not support macOS and does not expect to - Apple
 removed `ipdivert` from the kernel and there is no replacement - so it would mean writing a Network

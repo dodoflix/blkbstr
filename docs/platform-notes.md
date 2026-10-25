@@ -22,8 +22,11 @@ children, so it cannot be kept for the daemon alone. `ProtectHome=yes` hides `/h
 pointing `hostlist=` at a file the user can see is rejected as missing; the unit uses `read-only`
 instead, and SELinux gates the same thing behind `blkbstrd_read_user_content`.
 
-**Distros.** Package manager detection drives engine installation and must be user-overridable;
-auto-detection will be wrong on derivatives and on anyone's carefully broken system.
+**Engine install.** The wizard installs a pinned upstream release into `/opt/zapret2` rather than
+going through a package manager, so it does not depend on which distro this is or on anyone having
+packaged zapret2. It needs `curl` and `pkexec` (polkit) and a CPU upstream ships a binary for
+(x86, x86_64, arm, arm64, riscv64). The package manager is still detected from `ID`/`ID_LIKE` and
+shown in the advanced view, but nothing acts on it.
 
 **Firewall backend.** nftables only. Everything goes in a dedicated `inet blkbstr` table, so
 teardown is one atomic `nft delete table` that cannot touch another program's rules - in iptables
