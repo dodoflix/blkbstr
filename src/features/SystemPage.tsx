@@ -48,7 +48,7 @@ function Updates() {
   };
 
   return (
-    <Section title="Updates" description="Checks GitHub Releases when you ask. Nothing is sent but the request itself.">
+    <Section title="Updates" description="Checks GitHub Releases on start, every few hours and when you ask. Nothing is sent but the request itself.">
       <Sheet>
         <Stack gap={4}>
           <Row justify="space-between" gap={4}>
