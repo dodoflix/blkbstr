@@ -1,6 +1,8 @@
 //! `blkbstrd`: the privileged half of Blockbuster. Runs as a service (root or SYSTEM), owns the
 //! engine process and the firewall rules, and exposes a handful of operations over a local socket.
 
+#[cfg(windows)]
+mod defender;
 mod engine;
 mod firewall;
 mod hostlist;

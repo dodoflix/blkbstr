@@ -230,6 +230,11 @@ mod imp {
         stop_and_wait(&service)?;
         service.delete()?;
         tracing::info!("service removed");
+        // Only an engine Blockbuster installed got an exclusion; one the user put there did not.
+        let engine = blkbstr_core::engine_release::install_dir();
+        if blkbstr_core::engine_release::installed_in(&engine).is_some() {
+            crate::defender::forget(&engine);
+        }
         println!("Blockbuster's background helper is removed.");
         Ok(())
     }
