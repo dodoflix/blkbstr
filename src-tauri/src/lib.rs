@@ -7,6 +7,7 @@ mod engine_install;
 mod logs;
 mod service;
 mod tray;
+mod update_watch;
 mod updater;
 
 use blkbstr_core::candidates;
@@ -298,9 +299,24 @@ pub fn run() {
 
     let _log = applog::init();
     tauri::Builder::default()
+        // A second launch while the first sits in the tray brings that window back instead.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::show(app);
+        }))
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .on_window_event(|window, event| {
+            // Closing the window leaves the app in the tray; "Quit" in the tray menu ends it.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" && tray::present() {
+                    api.prevent_close();
+                    window.hide().ok();
+                }
+            }
+        })
         .setup(|app| {
+            update_watch::spawn(app.handle().clone());
             // No tray (no appindicator on this desktop) is not worth refusing to start over.
             if let Err(e) = tray::build(app.handle()) {
                 eprintln!("no tray icon: {e}");

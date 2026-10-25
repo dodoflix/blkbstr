@@ -3,6 +3,7 @@
 
 use crate::{configs, daemon};
 use blkbstr_core::protocol::{EngineStatus, Request, Response};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::image::Image;
@@ -11,6 +12,14 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager};
 
 const ID: &str = "main";
+
+/// Set once the icon exists. Closing the window only hides it while there is an icon to bring it
+/// back from; without one that would leave a running app nobody can reach.
+static PRESENT: AtomicBool = AtomicBool::new(false);
+
+pub fn present() -> bool {
+    PRESENT.load(Ordering::Relaxed)
+}
 const POLL: Duration = Duration::from_secs(5);
 
 struct Items {
@@ -53,6 +62,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
             _ => {}
         })
         .build(app)?;
+    PRESENT.store(true, Ordering::Relaxed);
     app.manage(Items {
         status,
         toggle,
@@ -69,7 +79,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-fn show(app: &AppHandle) {
+pub fn show(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         window.show().ok();
         window.unminimize().ok();
