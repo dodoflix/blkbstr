@@ -5,6 +5,8 @@ mod elevate;
 mod engine_install;
 mod logs;
 mod service;
+mod tray;
+mod updater;
 
 use blkbstr_core::candidates;
 use blkbstr_core::detect;
@@ -250,6 +252,14 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|app| {
+            // No tray (no appindicator on this desktop) is not worth refusing to start over.
+            if let Err(e) = tray::build(app.handle()) {
+                eprintln!("no tray icon: {e}");
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             daemon_info,
             detect_environment,
@@ -276,6 +286,8 @@ pub fn run() {
             load_config,
             save_config,
             delete_config,
+            updater::check_app_update,
+            updater::install_app_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

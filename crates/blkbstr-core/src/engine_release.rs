@@ -1,7 +1,7 @@
 //! The zapret2 release Blockbuster installs. Pinned with its hash because the file ends up
 //! executing as root (or SYSTEM): whoever can change what this downloads can run code on the machine.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub const VERSION: &str = "1.0.5.2";
 /// The `.tar.gz` that Unix installs from.
@@ -64,5 +64,45 @@ pub fn binary_dir() -> Option<&'static str> {
         (false, "arm") => Some("linux-arm"),
         (false, "riscv64") => Some("linux-riscv64"),
         _ => None,
+    }
+}
+
+const MARKER: &str = ".blkbstr-release";
+
+/// Written by the installer after a successful unpack. Without it there is no telling which
+/// upstream release a `nfqws2` came from, and an install Blockbuster did not make is not ours to
+/// replace.
+pub fn write_marker(dir: &Path) -> std::io::Result<()> {
+    std::fs::write(dir.join(MARKER), VERSION)
+}
+
+/// The release Blockbuster installed into `dir`, or `None` for an install it did not make.
+pub fn installed_in(dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(dir.join(MARKER)).ok()?;
+    Some(text.trim().to_owned()).filter(|v| !v.is_empty())
+}
+
+/// The pinned release, when the install in `dir` is Blockbuster's and older or newer than it.
+pub fn update_for(dir: &Path) -> Option<&'static str> {
+    installed_in(dir).filter(|v| v != VERSION).map(|_| VERSION)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_our_own_stale_install_is_offered_an_update() {
+        let dir = std::env::temp_dir().join(format!("blkbstr-marker-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(update_for(&dir), None, "no marker: not ours");
+
+        write_marker(&dir).unwrap();
+        assert_eq!(installed_in(&dir).as_deref(), Some(VERSION));
+        assert_eq!(update_for(&dir), None, "current");
+
+        std::fs::write(dir.join(MARKER), "0.0.1\n").unwrap();
+        assert_eq!(update_for(&dir), Some(VERSION));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

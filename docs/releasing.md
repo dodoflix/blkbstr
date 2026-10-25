@@ -19,6 +19,16 @@ Three files carry the version and Release Please updates all of them in the rele
 they cannot drift: `Cargo.toml` (`[workspace.package]`, plus the matching entries in `Cargo.lock`),
 `package.json` and `src-tauri/tauri.conf.json`. The list is in `release-please-config.json`.
 
+## App updates
+
+The app checks `latest.json` on the latest release (System page, Updates). Release builds sign
+the AppImage and the Windows installer with the key in the `TAURI_SIGNING_PRIVATE_KEY` repository
+secret, and the `updater-manifest` job publishes `latest.json` once both builds are attached. The
+matching public key is `plugins.updater.pubkey` in `src-tauri/tauri.conf.json`; lose the private
+key and installed apps can no longer be updated. deb and rpm installs only see that a version
+exists. The engine is updated on its own from the System page: it reinstalls the release pinned in
+the app, and only when Blockbuster made the install (the `.blkbstr-release` marker).
+
 ## Signing
 
 Nothing in a release is signed or attested yet, and there are no checksums. That matters more than

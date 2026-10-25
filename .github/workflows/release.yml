@@ -73,6 +73,8 @@ jobs:
       - run: npm ci
       # `tauri build` runs `npm run build` itself via beforeBuildCommand.
       - run: npm run tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       - run: cargo build --release -p blkbstr-daemon
 
       - name: Attach the packages to the release
@@ -82,7 +84,7 @@ jobs:
         run: |
           files=(target/release/blkbstrd)
           while IFS= read -r f; do files+=("$f"); done < <(
-            find target/release/bundle -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \))
+            find target/release/bundle -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o -name '*.AppImage.sig' \))
           gh release upload "$TAG" "${files[@]}" --clobber
 
   windows:
@@ -113,8 +115,35 @@ jobs:
       - run: npm ci
       # `tauri build` runs `npm run build` itself via beforeBuildCommand.
       - run: npm run tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       - name: Attach the installer to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release-please.outputs.tag }}
-        run: gh release upload $env:TAG (Get-ChildItem target/release/bundle/nsis/*-setup.exe).FullName --clobber
+        run: gh release upload $env:TAG (Get-ChildItem target/release/bundle/nsis/*-setup.exe*).FullName --clobber
+
+  # The app's updater reads latest.json from the latest release; it needs both signatures, so it
+  # runs after both builds.
+  updater-manifest:
+    needs: [release-please, linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish latest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag }}
+        run: |
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.sig' --dir sigs
+          linux=$(basename sigs/*.AppImage.sig .sig)
+          windows=$(basename sigs/*-setup.exe.sig .sig)
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          jq -n --arg v "${TAG#v}" --arg base "$base" \
+            --arg l "$linux" --arg ls "$(cat "sigs/$linux.sig")" \
+            --arg w "$windows" --arg ws "$(cat "sigs/$windows.sig")" \
+            '{version: $v, pub_date: (now | todate), platforms: {
+               "linux-x86_64": {signature: $ls, url: "\($base)/\($l)"},
+               "windows-x86_64": {signature: $ws, url: "\($base)/\($w)"}}}' > latest.json
+          gh release upload "$TAG" latest.json --clobber --repo "$GITHUB_REPOSITORY"

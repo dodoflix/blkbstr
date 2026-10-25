@@ -98,6 +98,7 @@ export async function mock<T>(cmd: string, args: Record<string, unknown> = {}): 
         platform: "linux",
         distro: { id: "arch", pretty_name: "CachyOS", package_manager: "pacman" },
         engine: engineInstalled ? { path: "/opt/zapret2/nfqws2", version: "v0.9.2" } : undefined,
+        engine_update: new URLSearchParams(location.search).has("engineupdate") ? "1.0.5.2" : undefined,
         existing_install: scenario === "legacy" || scenario === "noengine" ? "/opt/zapret2" : undefined,
         lua: { path: "/usr/bin/luajit", version: "LuaJIT 2.1.0", flavour: "luajit", major: 2, minor: 1, supported: true },
         nftables: { path: "/usr/bin/nft", version: "nftables v1.1.1" },
@@ -106,6 +107,12 @@ export async function mock<T>(cmd: string, args: Record<string, unknown> = {}): 
       await sleep(2200);
       if (scenario === "noengine" && new URLSearchParams(location.search).has("fail")) throw "the authorisation prompt was dismissed";
       engineInstalled = true;
+      return out(undefined);
+    case "check_app_update":
+      await sleep(600);
+      return out(new URLSearchParams(location.search).has("update") ? { version: "0.2.0", installable: !new URLSearchParams(location.search).has("package") } : null);
+    case "install_app_update":
+      await sleep(1500);
       return out(undefined);
     case "import_legacy": {
       await sleep(400);

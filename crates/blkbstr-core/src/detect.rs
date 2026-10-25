@@ -60,6 +60,9 @@ pub struct Environment {
     pub distro: Option<Distro>,
     /// A zapret2 tree already on the machine - something to import from rather than write over.
     pub existing_install: Option<PathBuf>,
+    /// The pinned zapret2 release, set when Blockbuster installed the engine and a different release
+    /// is installed than this build pins.
+    pub engine_update: Option<&'static str>,
 }
 
 /// Everything onboarding needs to decide what to do next.
@@ -80,6 +83,7 @@ pub fn environment() -> Environment {
         }),
         distro: distro(),
         existing_install: existing_install(),
+        engine_update: engine_release::update_for(&engine_release::install_dir()),
     }
 }
 

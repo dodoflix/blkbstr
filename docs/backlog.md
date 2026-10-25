@@ -72,14 +72,14 @@ done in this repository.
 
 ## Auto-update
 
-- [ ] App updates via Tauri's updater plugin against GitHub Releases - M4
-- [ ] Engine updates, tracked separately from app updates - M4
+- [x] App updates via Tauri's updater plugin against GitHub Releases - M4
+- [x] Engine updates, tracked separately from app updates - M4
 
 ## Appearance & UX
 
 - [x] Follows the OS light/dark setting - M0
 - [x] Explicit light/dark override, persisted - M4
-- [ ] System tray / menu bar toggle with a status indicator - M4
+- [x] System tray / menu bar toggle with a status indicator - M4
 - [ ] Localisation - M4
 - [ ] Accessibility pass: keyboard navigation, screen reader labels, contrast - M4
 

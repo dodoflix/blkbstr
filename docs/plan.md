@@ -107,9 +107,9 @@ through a wizard.
 
 ### M4 - Living with it
 
-- [ ] Auto-update via Tauri's updater plugin against GitHub Releases, with the *engine* updated
+- [x] Auto-update via Tauri's updater plugin against GitHub Releases, with the *engine* updated
   separately from the *app* - they have different risk profiles and different release cadences.
-- [ ] System tray / menu bar toggle with a status indicator.
+- [x] System tray / menu bar toggle with a status indicator.
 - [ ] Config sync to a user-supplied GitHub repo, private by default, with an explicit warning that a
   config reveals which sites someone visits and which strategies work in their country.
 - [ ] Localisation. Not an afterthought: the userbase is disproportionately non-English-speaking.
