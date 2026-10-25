@@ -52,12 +52,18 @@ fn download(to: &Path) -> Result<(), String> {
 
 #[cfg(windows)]
 fn unpack_as_root(archive: &Path) -> Result<(), String> {
+    // `blkbstrd install-engine` leaves its failure here: the elevated process has no output we can read.
+    let reason_file = format!("{}.err", archive.display());
+    std::fs::remove_file(&reason_file).ok();
     let archive = archive.display().to_string();
-    crate::elevate::run(
+    let result = crate::elevate::run(
         &crate::elevate::daemon_path()?,
         &["install-engine", &archive],
         "installing zapret2",
-    )
+    );
+    let reason = std::fs::read_to_string(&reason_file).ok();
+    std::fs::remove_file(&reason_file).ok();
+    result.map_err(|e| reason.filter(|r| !r.is_empty()).unwrap_or(e))
 }
 
 #[cfg(not(windows))]
