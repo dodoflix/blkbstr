@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/dodoflix/blkbstr/compare/v0.2.1...v0.2.2) (2026-10-25)
+
+
+### Bug fixes
+
+* **daemon:** exclude the engine archive from Windows Security before reading it ([#59](https://github.com/dodoflix/blkbstr/issues/59)) ([16486d5](https://github.com/dodoflix/blkbstr/commit/16486d59b9f1be5b7b8efe17d6cb341417b1dafa))
+
 ## [0.2.1](https://github.com/dodoflix/blkbstr/compare/v0.2.0...v0.2.1) (2026-10-25)
 
 
