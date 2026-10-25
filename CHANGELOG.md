@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/dodoflix/blkbstr/compare/v0.2.0...v0.2.1) (2026-10-25)
+
+
+### Bug fixes
+
+* **daemon:** stop Windows Security from removing the engine during install ([#56](https://github.com/dodoflix/blkbstr/issues/56)) ([3352e1a](https://github.com/dodoflix/blkbstr/commit/3352e1a3561163e4985ac695d97aff1f74bdcb2a))
+* use the Blockbuster icon and artwork in the Windows installer ([#58](https://github.com/dodoflix/blkbstr/issues/58)) ([3e590a8](https://github.com/dodoflix/blkbstr/commit/3e590a8d95c64e5e0189aa23f01cdfceb205abe4))
+
 ## [0.2.0](https://github.com/dodoflix/blkbstr/compare/v0.1.1...v0.2.0) (2026-10-25)
 
 
