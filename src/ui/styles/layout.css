@@ -82,6 +82,17 @@
   min-height: 0;
 }
 
+/* A scroller keeps its scrollbars in its own layer, below whatever is stacked over it. */
+.ui-scroll,
+.ui-panel__body,
+.ui-log,
+.ui-code__pre,
+.ui-tablewrap,
+.wizard__body,
+.wizard__rail {
+  isolation: isolate;
+}
+
 /* Shell */
 .ui-app {
   display: flex;
@@ -198,6 +209,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   clip-path: inset(0 0 0 0);
+  isolation: isolate;
   transition: clip-path var(--dur-3) var(--ease-out);
 }
 
@@ -264,6 +276,11 @@
 .ui-main {
   grid-column: 2;
   grid-row: 1;
+  /* Its own stacking context, so nothing inside it, scrollbars of nested scrollers included, can
+     paint above the sidebar's hover peek. */
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
   border-left: 1px solid var(--line);
   overflow: auto;
   min-height: 0;
