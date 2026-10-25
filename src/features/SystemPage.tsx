@@ -3,6 +3,7 @@ import {
   Badge,
   Button,
   Columns,
+  Notice,
   KeyValue,
   Panel,
   PageHeader,
@@ -16,6 +17,7 @@ import {
   Row,
   useConfirm,
 } from "../ui";
+import { useState } from "react";
 import * as api from "../api";
 import { useBackend } from "./backend";
 import { HelperInstall } from "./HelperInstall";
@@ -28,6 +30,67 @@ const found = (ok: boolean, label: string) => (
     <span>{label}</span>
   </Row>
 );
+
+/** App and engine are separate rows on purpose: the engine runs as root and updates on its own terms. */
+function Updates() {
+  const { env, act, refreshEnv } = useBackend();
+  const [found, setFound] = useState<api.AppUpdate | null>();
+  const [busy, setBusy] = useState<"check" | "install">();
+
+  const check = () => {
+    setBusy("check");
+    void act(async () => setFound(await api.checkAppUpdate())).finally(() => setBusy(undefined));
+  };
+  const install = () => {
+    setBusy("install");
+    void act(() => api.installAppUpdate()).finally(() => setBusy(undefined));
+  };
+
+  return (
+    <Section title="Updates" description="Checks GitHub Releases when you ask. Nothing is sent but the request itself.">
+      <Sheet>
+        <Stack gap={4}>
+          <Row justify="space-between" gap={4}>
+            <Text>
+              Blockbuster{" "}
+              {found === undefined ? null : found === null ? <Badge tone="ok">up to date</Badge> : <Badge tone="warn">v{found.version} available</Badge>}
+            </Text>
+            {found?.installable ? (
+              <Button size="sm" icon="download" loading={busy === "install"} onClick={install}>
+                Install and restart
+              </Button>
+            ) : (
+              <Button size="sm" variant="soft" tone="neutral" icon="refresh" loading={busy === "check"} onClick={check}>
+                Check
+              </Button>
+            )}
+          </Row>
+          {found && !found.installable && (
+            <Notice tone="neutral" title="Update through your package">
+              This install is managed by your package manager, or is not an AppImage. Get v{found.version} from the releases page.
+            </Notice>
+          )}
+          {env?.engine_update && (
+            <Row justify="space-between" gap={4}>
+              <Text>
+                zapret2 engine <Badge tone="warn">{env.engine_update} available</Badge>
+              </Text>
+              <Button
+                size="sm"
+                variant="soft"
+                tone="neutral"
+                icon="download"
+                onClick={() => void act(async () => { await api.installEngine(); await refreshEnv(); }, "zapret2 updated. A running engine picks it up on its next start.")}
+              >
+                Update engine
+              </Button>
+            </Row>
+          )}
+        </Stack>
+      </Sheet>
+    </Section>
+  );
+}
 
 export function SystemPage() {
   const { env, service, daemon, act, report, checking, check, refreshEnv } = useBackend();
@@ -110,6 +173,8 @@ export function SystemPage() {
         >
           <Panel maxHeight="18rem">{report ? <SiteList report={report} /> : <Text color={3}>Not checked yet.</Text>}</Panel>
         </Section>
+
+        <Updates />
 
         <Section title="Appearance">
           <Sheet>

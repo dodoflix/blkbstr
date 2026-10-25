@@ -24,6 +24,7 @@ pub fn run(tarball: &Path) -> Result<()> {
         dir,
         dest,
     )?;
+    engine_release::write_marker(dest)?;
     println!(
         "installed zapret2 {} in {}",
         engine_release::VERSION,

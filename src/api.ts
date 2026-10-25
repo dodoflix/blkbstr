@@ -76,6 +76,8 @@ export type Environment = {
   nftables?: Tool;
   distro?: Distro;
   existing_install?: string;
+  /** The zapret2 release this build pins, set when Blockbuster installed a different one. */
+  engine_update?: string;
 };
 
 export const detectEnvironment = () =>
@@ -92,6 +94,18 @@ export type LegacyImport = {
   /** Options that did not map onto a config, verbatim. */
   skipped: string[];
 };
+
+export type AppUpdate = {
+  version: string;
+  notes?: string;
+  /** False for deb and rpm installs, which update through their package manager. */
+  installable: boolean;
+};
+
+/** Null when this is the newest release. Talks to GitHub Releases only. */
+export const checkAppUpdate = () => invoke<AppUpdate | null>("check_app_update");
+/** Downloads, verifies the signature, installs and restarts the app. */
+export const installAppUpdate = () => invoke<void>("install_app_update");
 
 export const importLegacy = () => invoke<LegacyImport>("import_legacy");
 
