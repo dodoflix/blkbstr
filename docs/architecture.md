@@ -105,8 +105,8 @@ daemon has read it.
 Same flow, with the firewall step removed. `render.rs` writes `--wf-tcp-out` and `--wf-udp-out`
 into the parameter file from the same port list the nftables rules use, and `winws2` installs its
 own WinDivert filter when it starts. The daemon runs as a Windows service (`winservice.rs`), puts
-the engine in a job object that dies with it (`job.rs`), and the engine is installed from upstream's
-zip by `blkbstrd install-engine` behind a UAC prompt instead of `pkexec`. The GUI reaches the
+the engine in a job object that dies with it (`job.rs`), and the engine is downloaded and installed from
+upstream's zip by `blkbstrd install-engine` behind a UAC prompt instead of `pkexec`. The GUI reaches the
 elevated steps through `elevate.rs`. Platform details are in [platform-notes.md](platform-notes.md).
 
 ## Supervision

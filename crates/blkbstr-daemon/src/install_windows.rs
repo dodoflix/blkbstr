@@ -1,24 +1,37 @@
-//! `blkbstrd install-engine <zip>`: unpacks the pinned zapret2 release into Program Files. The GUI
-//! downloads the archive and runs this elevated through UAC, so the install is administrator work
-//! the user authorises, not something the service does on a request from the pipe.
+//! `blkbstrd install-engine`: downloads the pinned zapret2 release and unpacks it into Program Files.
+//! The GUI runs this elevated through UAC, so the install is administrator work the user authorises,
+//! not something the service does on a request from the pipe.
+//!
+//! The archive is fetched into memory here rather than by the GUI into the user's cache: it carries
+//! the WinDivert driver, so Defender blocks any read of a copy on disk (`os error 225`), and an
+//! exclusion added afterwards does not lift that.
 
 use crate::zip_install;
-use anyhow::{Context, Result};
-use blkbstr_core::engine_release;
-use std::path::Path;
+use anyhow::{bail, Context, Result};
+use blkbstr_core::{engine_release, process};
 
-pub fn run(archive: &Path) -> Result<()> {
-    // Read once and hash what was read: the file sits in a user-writable directory, so hashing
-    // it and then reopening it would let a swap in between through.
-    // The archive carries the flagged WinDivert driver, so Defender refuses the read (os error 225)
-    // unless the file is excluded first.
-    crate::defender::exclude(archive);
-    let read = std::fs::read(archive).with_context(|| format!("reading {}", archive.display()));
-    crate::defender::forget(archive);
-    let bytes = read?;
+/// curl ships with Windows 10 and later, which keeps TLS out of this binary.
+fn download() -> Result<Vec<u8>> {
+    let out = process::command("curl.exe")
+        .args(["--fail", "--silent", "--show-error", "--location"])
+        .args(["--proto", "=https", "--max-time", "300", "--output", "-"])
+        .arg(engine_release::url())
+        .output()
+        .context("running curl")?;
+    if !out.status.success() {
+        bail!(
+            "downloading zapret2: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+    Ok(out.stdout)
+}
+
+pub fn run() -> Result<()> {
     let dir = engine_release::binary_dir().context("upstream ships no engine for this CPU")?;
     let dest = engine_release::install_dir();
     crate::defender::exclude(&dest);
+    let bytes = download()?;
     zip_install::unpack(
         &bytes,
         engine_release::sha256(),

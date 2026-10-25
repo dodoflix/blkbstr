@@ -87,16 +87,19 @@ that decide who can reach SYSTEM:
 The named pipe admits SYSTEM and that one user, and refuses remote clients. Changing the start type
 (the "Start at boot" switch) needs administrator rights and prompts each time.
 
-**Uninstall.** The installer's hooks stop the service before an upgrade replaces `blkbstrd.exe`,
-remove it on uninstall and delete `C:\ProgramData\blkbstr`. The engine in Program Files stays: it
-was installed by the wizard, not by the installer.
+**Uninstall.** An app update runs the old uninstaller with `/UPDATE`; the hooks then only stop the
+service (and wait until it has stopped) so `blkbstrd.exe` can be replaced, and the service and `C:\ProgramData\blkbstr` stay. A real
+uninstall removes the service and deletes that directory. The engine in Program Files stays either
+way: it was installed by the wizard, not by the installer. If the helper still answers with a
+different version than the app after an update, the Dashboard offers to install it again.
 
 **Antivirus.** Windows Security flags the WinDivert driver that ships with the engine and removes it
-as it is written, and refuses to read the downloaded archive that holds it ("os error 225"). The
-engine install therefore excludes the archive and `C:\Program Files\zapret2` from Defender's scans
-first (`Add-MpPreference`); the archive exclusion is dropped once it is read. Uninstalling Blockbuster
-removes the folder exclusion when the engine there is one the wizard installed. With another
-antivirus, or Tamper Protection on, the exclusion cannot be set and the install says the file was blocked.
+as it is written. It also refuses any read of the zip that holds it (`os error 225`), and an
+exclusion added after the zip landed on disk does not lift that. So the elevated `install-engine`
+step downloads the zip into memory itself (`curl.exe`), excludes `C:\Program Files\zapret2` from
+Defender's scans (`Add-MpPreference`), checks the hash and unpacks. Uninstalling Blockbuster removes
+that exclusion when the engine there is one the wizard installed. With another antivirus, or
+Tamper Protection on, the exclusion cannot be set and the install says the file was blocked.
 
 **Windows on ARM.** Not offered. Upstream's answer is the x64 build with a test-signed driver and
 Test Signing mode switched on, which is not something to do behind a button.

@@ -26,6 +26,10 @@ pub struct DaemonInfo {
     reachable: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     version: Option<String>,
+    /// The helper answered but is not the version of this app, as after an app update that could
+    /// not restart it on the new binary.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    outdated: bool,
     /// Set when the daemon answered but speaks a different protocol, or did not answer at all.
     #[serde(skip_serializing_if = "Option::is_none")]
     problem: Option<String>,
@@ -39,16 +43,19 @@ fn daemon_info() -> DaemonInfo {
     }) {
         Ok(Response::Pong { daemon_version, .. }) => DaemonInfo {
             reachable: true,
+            outdated: daemon_version != env!("CARGO_PKG_VERSION"),
             version: Some(daemon_version),
             problem: None,
         },
         Ok(other) => DaemonInfo {
             reachable: false,
+            outdated: false,
             version: None,
             problem: Some(format!("unexpected reply to ping: {other:?}")),
         },
         Err(e) => DaemonInfo {
             reachable: false,
+            outdated: false,
             version: None,
             problem: Some(e.to_string()),
         },

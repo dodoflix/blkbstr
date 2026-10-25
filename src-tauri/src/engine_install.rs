@@ -1,9 +1,12 @@
-//! Installs the pinned zapret2 release. The download is unprivileged and lands in the user's cache;
-//! `blkbstrd install-engine` verifies it and writes it (through `pkexec` on Linux, a UAC prompt on
-//! Windows), so the GUI never runs elevated and the user sees an authorisation prompt before
-//! anything is written.
+//! Installs the pinned zapret2 release. On Linux the download is unprivileged and lands in the
+//! user's cache; `blkbstrd install-engine` verifies it and writes it through `pkexec`. On Windows
+//! `blkbstrd install-engine` does both behind a UAC prompt, because Defender blocks any copy of the
+//! archive left on disk. Either way the GUI never runs elevated and the user sees an authorisation
+//! prompt before anything is written.
 
-use blkbstr_core::{engine_release, paths, process, Platform};
+#[cfg(not(windows))]
+use blkbstr_core::process;
+use blkbstr_core::{engine_release, paths, Platform};
 use std::path::Path;
 
 #[cfg(not(windows))]
@@ -20,15 +23,7 @@ pub fn install() -> Result<(), String> {
     std::fs::create_dir_all(&dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
     let tarball = dir.join(engine_release::archive_name());
 
-    tracing::info!(url = %engine_release::url(), "downloading zapret2");
-    let result = download(&tarball).and_then(|()| {
-        let size = std::fs::metadata(&tarball).map_or(0, |m| m.len());
-        tracing::info!(
-            size,
-            "downloaded zapret2; asking for permission to install it"
-        );
-        unpack_as_root(&tarball)
-    });
+    let result = fetch_and_install(&tarball);
     std::fs::remove_file(&tarball).ok();
     match &result {
         Ok(()) => tracing::info!("zapret2 installed"),
@@ -37,8 +32,28 @@ pub fn install() -> Result<(), String> {
     result
 }
 
+#[cfg(not(windows))]
+fn fetch_and_install(tarball: &Path) -> Result<(), String> {
+    tracing::info!(url = %engine_release::url(), "downloading zapret2");
+    download(tarball)?;
+    let size = std::fs::metadata(tarball).map_or(0, |m| m.len());
+    tracing::info!(
+        size,
+        "downloaded zapret2; asking for permission to install it"
+    );
+    unpack_as_root(tarball)
+}
+
+/// The elevated step downloads; the path only anchors the file it reports a failure in.
+#[cfg(windows)]
+fn fetch_and_install(anchor: &Path) -> Result<(), String> {
+    tracing::info!("asking for permission to download and install zapret2");
+    unpack_as_root(anchor)
+}
+
 /// curl rather than an HTTP client crate: every desktop Linux has it, Windows 10 ships it, and it
 /// keeps TLS out of this binary.
+#[cfg(not(windows))]
 fn download(to: &Path) -> Result<(), String> {
     let out = process::command("curl")
         .args(["--fail", "--silent", "--show-error", "--location"])
