@@ -68,10 +68,33 @@ pub fn unpack(bytes: &[u8], sha256: &str, root: &str, binary_dir: &str, dest: &P
         fs::create_dir_all(path.parent().context("no parent directory")?)?;
         // Rename into place so a half-written file is never the one that gets executed.
         let tmp = path.with_extension("blkbstr-new");
-        fs::write(&tmp, data).with_context(|| format!("writing {}", tmp.display()))?;
-        fs::rename(&tmp, &path).with_context(|| format!("installing {}", path.display()))?;
+        fs::write(&tmp, data).map_err(|e| failed("writing", &tmp, e))?;
+        fs::rename(&tmp, &path).map_err(|e| failed("installing", &path, e))?;
+        // Real-time protection can remove a file right after it is closed, with no error.
+        if !path.is_file() {
+            bail!("{}\n{BLOCKED}", path.display());
+        }
     }
     Ok(())
+}
+
+const BLOCKED: &str = "Windows Security or another antivirus most likely blocked or removed it: \
+    the engine ships a WinDivert driver, which antivirus programs often flag. Allow it under \
+    Protection history, or exclude the install folder, then install again.";
+
+/// `ERROR_VIRUS_INFECTED` and `ERROR_VIRUS_DELETED`, which is how Defender refuses a write.
+fn blocked_by_antivirus(e: &std::io::Error) -> bool {
+    matches!(e.raw_os_error(), Some(225 | 226))
+}
+
+fn failed(doing: &str, path: &Path, e: std::io::Error) -> anyhow::Error {
+    // A temp file that is gone before the rename means something removed it in between.
+    let hint = blocked_by_antivirus(&e) || e.kind() == std::io::ErrorKind::NotFound;
+    let mut text = format!("{doing} {}: {e}", path.display());
+    if hint {
+        text.push_str(&format!("\n{BLOCKED}"));
+    }
+    anyhow::anyhow!(text)
 }
 
 #[cfg(test)]
@@ -105,6 +128,22 @@ mod tests {
 
     fn scratch(tag: &str) -> PathBuf {
         std::env::temp_dir().join(format!("blkbstr-zip-{tag}-{}", std::process::id()))
+    }
+
+    #[test]
+    fn an_antivirus_refusal_says_so() {
+        let refused = failed(
+            "writing",
+            Path::new("x"),
+            std::io::Error::from_raw_os_error(225),
+        );
+        assert!(format!("{refused:#}").contains("antivirus"));
+        let other = failed(
+            "writing",
+            Path::new("x"),
+            std::io::Error::from_raw_os_error(5),
+        );
+        assert!(!format!("{other:#}").contains("antivirus"));
     }
 
     #[test]
