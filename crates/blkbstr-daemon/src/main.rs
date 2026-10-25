@@ -96,9 +96,23 @@ fn run(args: &Args, ready: impl FnOnce(Arc<EngineSlot>) -> Result<()>) -> Result
 /// Not the service: a one-shot the GUI runs through `pkexec`, so it has no socket and no engine.
 fn install_engine(tarball: Option<String>) -> Result<()> {
     let tarball = tarball.context("usage: blkbstrd install-engine <archive>")?;
-    #[cfg(any(unix, windows))]
-    return install::run(std::path::Path::new(&tarball));
-    #[cfg(not(any(unix, windows)))]
+    let result = unpack_engine(&tarball);
+    // UAC gives the GUI no way to read this process's output, so the reason goes in a file next to
+    // the archive for it to pick up.
+    #[cfg(windows)]
+    if let Err(e) = &result {
+        std::fs::write(format!("{tarball}.err"), format!("{e:#}")).ok();
+    }
+    result
+}
+
+#[cfg(any(unix, windows))]
+fn unpack_engine(tarball: &str) -> Result<()> {
+    install::run(std::path::Path::new(tarball))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn unpack_engine(tarball: &str) -> Result<()> {
     anyhow::bail!("installing the engine is not supported on this platform yet ({tarball})")
 }
 
