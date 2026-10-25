@@ -428,6 +428,8 @@ mod render_tests {
             debug_log: None,
             lua_init: Vec::new(),
             validate: false,
+            auto_hostlist: None,
+            manual_hostlist: None,
         }
     }
 

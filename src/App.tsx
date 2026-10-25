@@ -6,6 +6,7 @@ import {
   Kbd,
   Titlebar,
   ConfirmProvider,
+  useConfirm,
   NavItem,
   Sidebar,
   SidebarToggle,
@@ -27,6 +28,7 @@ import { Dashboard, HomePlaceholder } from "./features/Dashboard";
 import { Onboarding } from "./features/Onboarding";
 import { LogsPage } from "./features/LogsPage";
 import { PrefsProvider, usePrefs } from "./features/prefs";
+import { discardPaused, pauseForSetup, resumeAfterSetup } from "./features/setup";
 import { SetupWizard } from "./features/SetupWizard";
 import { SystemPage } from "./features/SystemPage";
 
@@ -37,8 +39,8 @@ const DeveloperPage = import.meta.env.DEV ? lazy(() => import("./features/dev/De
 
 /** Home is the setup wizard until a config is saved, then a status page. Leaving the wizard is
  *  explicit so finishing it can show its last step. */
-function Home({ wizard, setWizard }: { wizard: boolean | undefined; setWizard: (on: boolean) => void }) {
-  const { ready, configs } = useBackend();
+function Home({ wizard, setWizard, onSetup }: { wizard: boolean | undefined; setWizard: (on: boolean) => void; onSetup: () => void }) {
+  const { ready, configs, act } = useBackend();
   const { onboarded } = usePrefs();
   useEffect(() => {
     if (ready && wizard === undefined) setWizard(configs.length === 0);
@@ -49,9 +51,19 @@ function Home({ wizard, setWizard }: { wizard: boolean | undefined; setWizard: (
   return (
     <>
       {wizard ? (
-        <SetupWizard canCancel={configs.length > 0} onCancel={() => setWizard(false)} onDone={() => setWizard(false)} />
+        <SetupWizard
+          canCancel={configs.length > 0}
+          onCancel={() => {
+            setWizard(false);
+            void act(resumeAfterSetup);
+          }}
+          onDone={() => {
+            discardPaused();
+            setWizard(false);
+          }}
+        />
       ) : (
-        <Dashboard onSetup={() => setWizard(true)} />
+        <Dashboard onSetup={onSetup} />
       )}
     </>
   );
@@ -95,7 +107,7 @@ function Shell() {
       { id: "logs", label: "Go to Logs", icon: "terminal", run: () => setPage("logs") },
       { id: "system", label: "Go to System", icon: "cpu", run: () => setPage("system") },
       ...(import.meta.env.DEV ? [{ id: "developer", label: "Go to Developer", icon: "bug" as const, run: () => setPage("developer") }] : []),
-      { id: "setup", label: "Run setup", icon: "wand", keywords: "wizard find strategy", run: () => { setPage("home"); setWizard(true); } },
+      { id: "setup", label: "Run setup", icon: "wand", keywords: "wizard find strategy", run: () => void openSetup() },
       status?.running
         ? { id: "off", label: "Turn off", icon: "power", run: () => void act(api.engineStop) }
         : { id: "on", label: "Turn on", icon: "power", hint: configs[0], run: () => configs[0] && void act(async () => api.engineStart(await api.loadConfig(configs[0]))) },
@@ -113,7 +125,19 @@ function Shell() {
     [status?.running, configs, advanced, act, setAdvanced, theme, setTheme],
   );
 
-  const openSetup = () => {
+  const confirm = useConfirm();
+  /** Every way into setup comes through here, because setup measures with Blockbuster off. */
+  const openSetup = async () => {
+    if (status?.running) {
+      const ok = await confirm({
+        title: "Turn Blockbuster off to run setup?",
+        description:
+          "Setup has to test your connection without Blockbuster, or every site would look like it already loads and the search would find nothing to fix. Blocked sites stop loading while it runs. Leaving setup without saving turns your current config back on; closing the app instead leaves it off.",
+        confirmLabel: "Turn off and continue",
+        tone: "warn",
+      });
+      if (!ok || !(await act(() => pauseForSetup(status)))) return;
+    }
     setPage("home");
     setWizard(true);
   };
@@ -157,12 +181,12 @@ function Shell() {
       >
         {visited.includes("home") && (
           <div className="ui-page" hidden={page !== "home"}>
-            <Home wizard={wizard} setWizard={setWizard} />
+            <Home wizard={wizard} setWizard={setWizard} onSetup={() => void openSetup()} />
           </div>
         )}
         {visited.includes("configs") && (
           <div className="ui-page" hidden={page !== "configs"}>
-            <ConfigsPage onSetup={openSetup} />
+            <ConfigsPage onSetup={() => void openSetup()} />
           </div>
         )}
         {visited.includes("logs") && (

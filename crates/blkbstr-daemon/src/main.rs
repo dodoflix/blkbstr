@@ -1,8 +1,9 @@
 //! `blkbstrd`: the privileged half of Blockbuster. Runs as a service (root or SYSTEM), owns the
-//! engine process and the firewall rules, and exposes four operations over a local socket.
+//! engine process and the firewall rules, and exposes a handful of operations over a local socket.
 
 mod engine;
 mod firewall;
+mod hostlist;
 #[cfg(unix)]
 mod install;
 #[cfg(windows)]
@@ -19,7 +20,8 @@ mod zip_install;
 use anyhow::{Context, Result};
 use blkbstr_core::paths;
 use blkbstr_core::protocol::{
-    read_message, write_message, EngineStatus, ErrorCode, Request, Response, PROTOCOL_VERSION,
+    read_message, write_message, EngineStatus, ErrorCode, HostList, Request, Response,
+    PROTOCOL_VERSION,
 };
 use blkbstr_core::registry::{self, Platform};
 use engine::Engine;
@@ -71,6 +73,7 @@ fn run(args: &Args, ready: impl FnOnce(Arc<EngineSlot>) -> Result<()>) -> Result
         engine.restore();
     }
     spawn_monitor(Arc::clone(&engine));
+    spawn_hostlist_check(Arc::clone(&engine));
     ready(Arc::clone(&engine))?;
 
     for conn in listener.incoming() {
@@ -130,6 +133,23 @@ fn spawn_monitor(engine: Arc<EngineSlot>) {
             engine.tick();
         }
     });
+}
+
+/// Re-checks the learned hosts on a schedule. Its own thread, because a check waits on the
+/// network and the engine lock must not be held that long.
+fn spawn_hostlist_check(engine: Arc<EngineSlot>) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(MONITOR_INTERVAL);
+        hostlist::tick(list_in_use(&engine, HostList::Auto));
+    });
+}
+
+fn list_in_use(engine: &EngineSlot, list: HostList) -> bool {
+    engine
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .is_ok_and(|engine| engine.list_in_use(list))
 }
 
 /// A missing engine binary is reported per request, not at startup, so `ping` and `status` still
@@ -273,6 +293,29 @@ fn serve(conn: Stream, engine: &EngineSlot) -> Result<()> {
 }
 
 fn handle(request: Request, engine: &EngineSlot) -> Response {
+    // These touch a file and the network, not the engine, so they must not queue behind its lock.
+    match &request {
+        Request::Hosts { list } => {
+            return Response::Hosts(hostlist::status(*list, list_in_use(engine, *list)));
+        }
+        Request::HostsAdd { list, hosts } => {
+            return match hostlist::add_hosts(&hostlist::path_for(*list), hosts) {
+                Ok(_) => Response::Ok,
+                Err(e) => engine_failed(e),
+            };
+        }
+        Request::HostsRemove { list, hosts } => {
+            return match hostlist::remove_hosts(&hostlist::path_for(*list), hosts) {
+                Ok(()) => Response::Ok,
+                Err(e) => engine_failed(e),
+            };
+        }
+        Request::HostsCheck => {
+            hostlist::check_in_background();
+            return Response::Ok;
+        }
+        _ => {}
+    }
     // A panic in one connection must not poison the engine for every later one.
     let mut guard = engine.lock().unwrap_or_else(|e| e.into_inner());
 
@@ -336,6 +379,12 @@ fn handle(request: Request, engine: &EngineSlot) -> Response {
                 message: why.clone(),
             },
         },
+        Request::Hosts { .. }
+        | Request::HostsAdd { .. }
+        | Request::HostsRemove { .. }
+        | Request::HostsCheck => {
+            unreachable!("answered before the engine lock")
+        }
     }
 }
 

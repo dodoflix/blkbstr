@@ -8,16 +8,117 @@ use std::io::{ErrorKind, Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::{Duration, Instant};
 
-/// Sites commonly interfered with, plus enough variety that one company's outage is not mistaken
-/// for censorship.
-pub const DEFAULT_HOSTS: &[&str] = &[
-    "www.youtube.com",
-    "discord.com",
-    "x.com",
-    "www.instagram.com",
-    "www.facebook.com",
-    "rutracker.org",
+/// A group of sites that are blocked together, since a censor tends to treat a category alike and
+/// a strategy that opens one video site says little about an adult one.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct Category {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub hosts: &'static [&'static str],
+}
+
+/// Sites commonly interfered with, several per category: one company's outage is not mistaken for
+/// censorship, and a strategy has to open the variety it will meet, not just what happened to be
+/// tested. Only the blocked ones are tried against each candidate, so a long list costs one
+/// parallel round, not one per strategy.
+pub const CATEGORIES: &[Category] = &[
+    Category {
+        id: "video",
+        label: "Video and music",
+        hosts: &[
+            "youtube.com",
+            "twitch.tv",
+            "vimeo.com",
+            "dailymotion.com",
+            "soundcloud.com",
+        ],
+    },
+    Category {
+        id: "social",
+        label: "Social media",
+        hosts: &[
+            "x.com",
+            "www.instagram.com",
+            "www.facebook.com",
+            "www.linkedin.com",
+            "www.reddit.com",
+        ],
+    },
+    Category {
+        id: "messaging",
+        label: "Messaging",
+        hosts: &["discord.com", "telegram.org", "signal.org", "viber.com"],
+    },
+    Category {
+        id: "games",
+        label: "Games",
+        hosts: &[
+            "roblox.com",
+            "store.steampowered.com",
+            "www.epicgames.com",
+            "www.ea.com",
+            "battle.net",
+        ],
+    },
+    Category {
+        id: "news",
+        label: "News and reference",
+        hosts: &[
+            "www.bbc.com",
+            "dw.com",
+            "www.rferl.org",
+            "meduza.io",
+            "www.wikipedia.org",
+        ],
+    },
+    Category {
+        id: "adult",
+        label: "Adult",
+        hosts: &[
+            "pornhub.com",
+            "xvideos.com",
+            "xnxx.com",
+            "xhamster.com",
+            "redtube.com",
+        ],
+    },
+    Category {
+        id: "files",
+        label: "Torrents and files",
+        hosts: &[
+            "rutracker.org",
+            "thepiratebay.org",
+            "1337x.to",
+            "archive.org",
+            "mega.nz",
+        ],
+    },
+    Category {
+        id: "privacy",
+        label: "Privacy and VPN",
+        hosts: &[
+            "protonvpn.com",
+            "www.torproject.org",
+            "nordvpn.com",
+            "mullvad.net",
+            "windscribe.com",
+        ],
+    },
+    Category {
+        id: "tools",
+        label: "Tools and AI",
+        hosts: &["chatgpt.com", "claude.ai", "medium.com", "www.notion.so"],
+    },
 ];
+
+/// Every site in every category.
+pub fn default_hosts() -> Vec<String> {
+    CATEGORIES
+        .iter()
+        .flat_map(|c| c.hosts)
+        .map(|h| (*h).to_owned())
+        .collect()
+}
 
 /// Reserved by IANA for documentation, serves TLS, and no censor cares about it. If it fails, the
 /// network is broken.
@@ -82,13 +183,25 @@ impl Report {
     }
 }
 
+/// Opens the TCP connection a probe speaks over. The daemon supplies one whose packets the firewall
+/// leaves out of the engine's queue, so a probe sees the network as it is without the strategy.
+pub type Connector = dyn Fn(&SocketAddr, Duration) -> std::io::Result<TcpStream> + Sync;
+
+fn plain_connect(address: &SocketAddr, timeout: Duration) -> std::io::Result<TcpStream> {
+    TcpStream::connect_timeout(address, timeout)
+}
+
 /// Checks the control host and every site concurrently, so the timeout is not multiplied by the list.
 pub fn check(hosts: &[String], timeout: Duration) -> Report {
+    check_with(hosts, timeout, &plain_connect)
+}
+
+pub fn check_with(hosts: &[String], timeout: Duration, connect: &Connector) -> Report {
     std::thread::scope(|scope| {
-        let control = scope.spawn(move || check_host(CONTROL_HOST, timeout));
+        let control = scope.spawn(move || check_host_with(CONTROL_HOST, timeout, connect));
         let running: Vec<_> = hosts
             .iter()
-            .map(|host| scope.spawn(move || check_host(host, timeout)))
+            .map(|host| scope.spawn(move || check_host_with(host, timeout, connect)))
             .collect();
 
         let control = control.join().unwrap_or_else(|_| failed(CONTROL_HOST));
@@ -114,8 +227,12 @@ fn failed(host: &str) -> SiteResult {
 }
 
 pub fn check_host(host: &str, timeout: Duration) -> SiteResult {
+    check_host_with(host, timeout, &plain_connect)
+}
+
+fn check_host_with(host: &str, timeout: Duration, connect: &Connector) -> SiteResult {
     let started = Instant::now();
-    let (verdict, detail) = probe(host, timeout);
+    let (verdict, detail) = probe(host, timeout, connect);
     SiteResult {
         host: host.to_owned(),
         verdict,
@@ -124,7 +241,7 @@ pub fn check_host(host: &str, timeout: Duration) -> SiteResult {
     }
 }
 
-fn probe(host: &str, timeout: Duration) -> (Verdict, Option<String>) {
+fn probe(host: &str, timeout: Duration, connect: &Connector) -> (Verdict, Option<String>) {
     if let Err(why) = check_hostname(host) {
         return (Verdict::BadHost, Some(why.into()));
     }
@@ -140,12 +257,17 @@ fn probe(host: &str, timeout: Duration) -> (Verdict, Option<String>) {
         };
     };
 
-    probe_address(*address, host, timeout)
+    probe_address_with(*address, host, timeout, connect)
 }
 
 /// Split out from [`probe`] so verdicts that depend on server behaviour can be tested on a local socket.
-fn probe_address(address: SocketAddr, host: &str, timeout: Duration) -> (Verdict, Option<String>) {
-    let mut stream = match TcpStream::connect_timeout(&address, timeout) {
+fn probe_address_with(
+    address: SocketAddr,
+    host: &str,
+    timeout: Duration,
+    connect: &Connector,
+) -> (Verdict, Option<String>) {
+    let mut stream = match connect(&address, timeout) {
         Ok(stream) => stream,
         Err(e) => return (Verdict::TcpBlocked, Some(format!("{}: {e}", address.ip()))),
     };
@@ -179,7 +301,7 @@ fn probe_address(address: SocketAddr, host: &str, timeout: Duration) -> (Verdict
 }
 
 /// ASCII and within the DNS length limit: the name reaches a `u16` SNI length and the resolver.
-fn check_hostname(host: &str) -> Result<(), &'static str> {
+pub fn check_hostname(host: &str) -> Result<(), &'static str> {
     if host.is_empty() || host.len() > 253 {
         return Err("a hostname is 1 to 253 characters");
     }
@@ -387,7 +509,7 @@ mod tests {
             let _ = stream.write_all(&[0x16, 0x03, 0x03, 0x00, 0x2a]);
         });
         assert_eq!(
-            probe_address(address, "example.com", SHORT).0,
+            probe_address_with(address, "example.com", SHORT, &plain_connect).0,
             Verdict::Fine
         );
         handle.join().unwrap();
@@ -400,7 +522,7 @@ mod tests {
             swallow_hello(&mut stream);
             let _ = stream.write_all(&[0x15, 0x03, 0x03, 0x00, 0x02, 0x02, 0x28]);
         });
-        let (verdict, detail) = probe_address(address, "example.com", SHORT);
+        let (verdict, detail) = probe_address_with(address, "example.com", SHORT, &plain_connect);
         assert_eq!(verdict, Verdict::Fine);
         assert!(detail.unwrap().contains("alert"));
         handle.join().unwrap();
@@ -413,7 +535,7 @@ mod tests {
             drop(stream);
         });
         assert_eq!(
-            probe_address(address, "example.com", SHORT).0,
+            probe_address_with(address, "example.com", SHORT, &plain_connect).0,
             Verdict::TlsReset
         );
         handle.join().unwrap();
@@ -426,7 +548,7 @@ mod tests {
             std::thread::sleep(SHORT * 4);
         });
         assert_eq!(
-            probe_address(address, "example.com", SHORT).0,
+            probe_address_with(address, "example.com", SHORT, &plain_connect).0,
             Verdict::TlsSilent
         );
         handle.join().unwrap();
@@ -439,7 +561,7 @@ mod tests {
             let _ = stream.write_all(b"HTTP/1.1 403 Forbidden\r\n");
         });
         assert_eq!(
-            probe_address(address, "example.com", SHORT).0,
+            probe_address_with(address, "example.com", SHORT, &plain_connect).0,
             Verdict::TlsReset
         );
         handle.join().unwrap();
@@ -451,16 +573,30 @@ mod tests {
         let address = listener.local_addr().unwrap();
         drop(listener);
         assert_eq!(
-            probe_address(address, "example.com", SHORT).0,
+            probe_address_with(address, "example.com", SHORT, &plain_connect).0,
             Verdict::TcpBlocked
         );
+    }
+
+    #[test]
+    fn every_listed_site_is_a_usable_unique_hostname() {
+        let hosts = default_hosts();
+        for host in &hosts {
+            assert!(check_hostname(host).is_ok(), "{host}");
+            assert_eq!(host, &host.to_ascii_lowercase(), "{host}");
+        }
+        let mut sorted = hosts.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(sorted.len(), hosts.len(), "a site listed twice");
+        assert!(!hosts.iter().any(|h| h == CONTROL_HOST));
     }
 
     /// Real network, so not run by default: `cargo test -p blkbstr-core -- --ignored --nocapture`.
     #[test]
     #[ignore]
     fn checks_this_machine_against_the_real_internet() {
-        let hosts: Vec<String> = DEFAULT_HOSTS.iter().map(|h| (*h).to_owned()).collect();
+        let hosts = default_hosts();
         let report = check(&hosts, DEFAULT_TIMEOUT);
         println!(
             "network_ok={} control={:?}",

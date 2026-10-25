@@ -50,7 +50,11 @@ to `winws2.exe`, and the wizard installs both into `%ProgramFiles%\zapret2`.
 nothing to install or tear down, so `firewall.rs` is Linux-only in practice. Only outgoing ports
 are named: SYN+ACK, FIN and RST come back on their own, and WinDivert cannot limit interception to
 a flow's first packets the way conntrack does, so intercepting every incoming segment of a download
-is CPU spent for nothing. A strategy that needs incoming data would need `--wf-tcp-in`.
+is CPU spent for nothing. The exception is the auto host list (which also adds a raw filter that
+skips the daemon's own probes, marked by their TTL, so the periodic check never goes through the
+strategy): its failure detector reads resets
+and retransmissions, so while it is in use the renderer adds `--wf-tcp-in` and `--wf-udp-in` for the
+same ports, and Windows pays that CPU cost.
 
 **Stopping restores the machine.** The engine's filter dies with its process, and the daemon puts
 the engine in a job object that kills it when the daemon goes, however that happens. Without that a

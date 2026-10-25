@@ -34,6 +34,10 @@ export type Config = {
   notes?: string;
   /** NFQWS2_COMPAT_VER the actions were written against. */
   compat: number;
+  /** Work around only sites the engine has seen fail; on by default. */
+  auto_hostlist: boolean;
+  /** Work around only the sites on the user's own list; off by default. Combines with `auto_hostlist`. */
+  manual_hostlist: boolean;
   strategies: Strategy[];
 };
 
@@ -47,6 +51,26 @@ export type EngineStatus = {
   last_error?: string;
   /** Seconds until an unconfirmed trial run is undone; absent once kept. */
   revert_in_seconds?: number;
+};
+
+/** `auto` is what the engine learned is blocked; `manual` is the user's own list. */
+export type HostList = "auto" | "manual";
+
+export type HostsStatus = {
+  list: HostList;
+  /** True when the running config uses the list. */
+  enabled: boolean;
+  hosts: string[];
+  /** False where the daemon cannot probe without disturbing traffic (neither Linux nor Windows). */
+  can_recheck: boolean;
+  /** Only the learned list is re-checked. */
+  checking: boolean;
+  /** Unix seconds the last re-check finished. */
+  last_check?: number;
+  /** Hosts the last re-check found loading without a strategy, and dropped. */
+  last_dropped: string[];
+  /** Unix seconds the next scheduled re-check runs. */
+  next_check?: number;
 };
 
 export type Tool = { path: string; version?: string };
@@ -137,6 +161,11 @@ export type Report = {
 export const checkReachability = (hosts?: string[], timeoutMs?: number) =>
   invoke<Report>("check_reachability", { hosts, timeoutMs });
 
+/** A group of built-in sites, so a whole kind of site can be left out of the check. */
+export type SiteCategory = { id: string; label: string; hosts: string[] };
+
+export const siteCategories = () => invoke<SiteCategory[]>("site_categories");
+
 /** The only port the reachability check speaks on. */
 export const PROBED_TCP_PORT = "443";
 /** Per-candidate timeout during the walk; the baseline check uses the daemon's longer default. */
@@ -204,6 +233,14 @@ export const engineStart = (config: Config, ephemeral = false) =>
 /** Cancels the daemon's automatic revert and persists the config. */
 export const engineConfirm = () => invoke<void>("engine_confirm");
 export const engineStop = () => invoke<void>("engine_stop");
+
+export const hosts = (list: HostList) => invoke<HostsStatus>("hosts", { list });
+/** Anything that is not a plain hostname is ignored by the daemon. */
+export const hostsAdd = (list: HostList, hosts: string[]) => invoke<void>("hosts_add", { list, hosts });
+/** The engine learns a removed host again if it still fails. */
+export const hostsRemove = (list: HostList, hosts: string[]) => invoke<void>("hosts_remove", { list, hosts });
+/** Re-checks the learned list now. Returns at once; progress shows in `hosts`. */
+export const hostsCheck = () => invoke<void>("hosts_check");
 
 /** Local and pure; safe to call on every keystroke. */
 export const lintConfig = (config: Config) =>

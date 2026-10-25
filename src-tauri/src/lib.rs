@@ -10,7 +10,9 @@ mod updater;
 
 use blkbstr_core::candidates;
 use blkbstr_core::detect;
-use blkbstr_core::protocol::{EngineStatus, Request, Response, PROTOCOL_VERSION};
+use blkbstr_core::protocol::{
+    EngineStatus, HostList, HostsStatus, Request, Response, PROTOCOL_VERSION,
+};
 use blkbstr_core::reachability;
 use blkbstr_core::registry::{self, Warning};
 use blkbstr_core::Config;
@@ -81,6 +83,33 @@ fn engine_stop() -> Result<(), daemon::Error> {
     daemon::request(Request::Stop).map(|_| ())
 }
 
+/// The learned or the user's own host list, with the learned list's re-check state.
+#[tauri::command]
+fn hosts(list: HostList) -> Result<HostsStatus, daemon::Error> {
+    match daemon::request(Request::Hosts { list })? {
+        Response::Hosts(status) => Ok(status),
+        other => Err(daemon::Error::Io(format!(
+            "unexpected reply to hosts: {other:?}"
+        ))),
+    }
+}
+
+#[tauri::command]
+fn hosts_add(list: HostList, hosts: Vec<String>) -> Result<(), daemon::Error> {
+    daemon::request(Request::HostsAdd { list, hosts }).map(|_| ())
+}
+
+#[tauri::command]
+fn hosts_remove(list: HostList, hosts: Vec<String>) -> Result<(), daemon::Error> {
+    daemon::request(Request::HostsRemove { list, hosts }).map(|_| ())
+}
+
+/// Returns at once; the check runs in the daemon and shows up in `hosts`.
+#[tauri::command]
+fn hosts_check() -> Result<(), daemon::Error> {
+    daemon::request(Request::HostsCheck).map(|_| ())
+}
+
 /// Engine, Lua runtime, nftables, distro, and any zapret2 install already present. Local, so
 /// onboarding works before any daemon exists.
 #[tauri::command]
@@ -111,17 +140,18 @@ async fn check_reachability(
     timeout_ms: Option<u64>,
 ) -> Result<reachability::Report, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let hosts = hosts.unwrap_or_else(|| {
-            reachability::DEFAULT_HOSTS
-                .iter()
-                .map(|h| (*h).to_owned())
-                .collect()
-        });
+        let hosts = hosts.unwrap_or_else(reachability::default_hosts);
         let timeout = timeout_ms.map_or(reachability::DEFAULT_TIMEOUT, Duration::from_millis);
         reachability::check(&hosts, timeout)
     })
     .await
     .map_err(|e| format!("the reachability check did not finish: {e}"))
+}
+
+/// The built-in sites, grouped, so the UI can show and switch off whole categories.
+#[tauri::command]
+fn site_categories() -> &'static [reachability::Category] {
+    reachability::CATEGORIES
 }
 
 /// The strategies auto-configuration tries, in order. The walk runs in the UI: each step is an
@@ -155,10 +185,14 @@ fn starter_config(name: String) -> Config {
 fn preview_config(config: Config) -> Result<String, String> {
     let platform =
         blkbstr_core::Platform::current().ok_or("this platform has no zapret2 engine")?;
-    Ok(blkbstr_core::render::parameter_file(
-        &config,
-        &blkbstr_core::render::EngineOptions::new(platform),
-    ))
+    let mut options = blkbstr_core::render::EngineOptions::new(platform);
+    options.auto_hostlist = Some(blkbstr_core::paths::for_engine(
+        &blkbstr_core::paths::auto_hostlist(),
+    ));
+    options.manual_hostlist = Some(blkbstr_core::paths::for_engine(
+        &blkbstr_core::paths::manual_hostlist(),
+    ));
+    Ok(blkbstr_core::render::parameter_file(&config, &options))
 }
 
 #[tauri::command]
@@ -266,11 +300,16 @@ pub fn run() {
             install_engine,
             import_legacy,
             check_reachability,
+            site_categories,
             autoconfig_candidates,
             engine_status,
             engine_start,
             engine_confirm,
             engine_stop,
+            hosts,
+            hosts_add,
+            hosts_remove,
+            hosts_check,
             lint_config,
             known_functions,
             starter_config,

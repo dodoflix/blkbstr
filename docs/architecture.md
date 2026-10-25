@@ -133,6 +133,24 @@ It is written only *after* the engine is up, so a config that cannot run is neve
 machine tries to bring up at boot. It is re-validated on the way back in for the same reason
 everything else is: that file decides what a root process runs.
 
+## The host lists
+
+The daemon owns two files in the state directory: `hostlist.txt`, the user's own list, which the
+engine only reads, and `autohostlist.txt`. With `auto_hostlist` on, the engine appends hosts it sees fail to `autohostlist.txt` in the state
+directory. nfqws2 drops root after starting and appends as its default user (`0x7FFFFFFF`), so the
+daemon creates the file owned by that user before every start, and the state directory is mode
+`0711` so the path is reachable. `active.json` is written `0600` to make up for it. A daemon run
+without root cannot chown, and the engine is not dropping privileges there either.
+
+Nothing removes a host from that file except the daemon. Every six hours, while the list is in use,
+it probes the hosts with the reachability check and drops the ones that answer. The probe sockets
+carry a marker the engine ignores, so they measure the block, not the strategy, and the user's
+connections stay protected throughout. On Linux it is a firewall mark that the nftables rules skip,
+a different bit from the engine's own because that one also disables connection tracking and NAT
+would lose the reply. On Windows it is an IP TTL of 127, and the generated WinDivert filter gets
+`--wf-raw-filter` to leave outgoing packets with that TTL alone.
+See [config-format.md](config-format.md#which-sites-get-a-strategy).
+
 One connection per request. The daemon is a service that can restart underneath a running GUI, so
 a persistent connection would buy reconnect logic and nothing else.
 

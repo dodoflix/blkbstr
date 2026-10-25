@@ -9,6 +9,8 @@ const cfg = (name: string, notes: string, fn: string): Config => ({
   name,
   notes,
   compat: 1,
+  auto_hostlist: true,
+  manual_hostlist: false,
   strategies: [{ name: "tls", enabled: true, filter: { tcp: "443", l7: ["tls"] }, actions: [{ function: fn, args: { pos: "1", ttl: "4" } }] }],
 });
 
@@ -28,12 +30,29 @@ const BLOCKED: Record<string, Verdict> = {
   "youtube.com": "tls_silent",
   "x.com": "dns_poisoned",
   "soundcloud.com": "tls_reset",
+  "pornhub.com": "tls_reset",
+  "xnxx.com": "tls_reset",
+  "protonvpn.com": "tls_silent",
 };
+const SITE_CATEGORIES = [
+  { id: "video", label: "Video and music", hosts: ["youtube.com", "twitch.tv", "soundcloud.com"] },
+  { id: "messaging", label: "Messaging", hosts: ["discord.com", "signal.org", "telegram.org"] },
+  { id: "social", label: "Social media", hosts: ["x.com", "www.reddit.com"] },
+  { id: "adult", label: "Adult", hosts: ["pornhub.com", "xvideos.com", "xnxx.com"] },
+  { id: "privacy", label: "Privacy and VPN", hosts: ["protonvpn.com", "www.torproject.org"] },
+];
 const HOSTS = ["discord.com", "youtube.com", "x.com", "signal.org", "soundcloud.com", "medium.com"];
 
 const saved = new Map<string, Config>((scenario === "ready" || scenario === "biglog") ? [["fake-badsum", { ...CANDIDATES[3].config, name: "fake-badsum" }], ["multisplit-pos1", CANDIDATES[0].config]] : []);
 let running: { config: Config; ephemeral: boolean; startedAt: number; revertAt?: number } | undefined =
   (scenario === "ready" || scenario === "biglog") ? { config: saved.get("fake-badsum")!, ephemeral: false, startedAt: Math.floor(Date.now() / 1000) - 5400 } : undefined;
+
+const lists: Record<"auto" | "manual", string[]> = {
+  auto: scenario === "ready" ? ["discord.com", "gateway.discord.gg", "rutracker.org"] : [],
+  manual: scenario === "ready" ? ["pornhub.com"] : [],
+};
+let lastCheck: { at: number; dropped: string[] } | undefined;
+let checkingUntil = 0;
 
 let engineInstalled = scenario !== "noengine";
 
@@ -124,6 +143,8 @@ export async function mock<T>(cmd: string, args: Record<string, unknown> = {}): 
         skipped: scenario === "legacy" ? ["--ctrack-timeouts=1", "<HOSTLIST> (list selection is not imported)"] : [],
       });
     }
+    case "site_categories":
+      return out(SITE_CATEGORIES);
     case "check_reachability":
       return out(await reachability(args.hosts as string[] | undefined));
     case "autoconfig_candidates":
@@ -139,6 +160,39 @@ export async function mock<T>(cmd: string, args: Record<string, unknown> = {}): 
       return out(undefined);
     case "engine_status":
       return out(status());
+    case "hosts": {
+      const list = args.list as "auto" | "manual";
+      const used = list === "auto" ? running?.config.auto_hostlist : running?.config.manual_hostlist;
+      return out({
+        list,
+        enabled: Boolean(used),
+        can_recheck: new URLSearchParams(location.search).get("platform") !== "windows",
+        hosts: lists[list],
+        checking: list === "auto" && Date.now() < checkingUntil,
+        last_check: list === "auto" ? lastCheck?.at : undefined,
+        last_dropped: list === "auto" ? (lastCheck?.dropped ?? []) : [],
+        next_check: list === "auto" && used ? Math.floor(Date.now() / 1000) + 5 * 3600 : undefined,
+      });
+    }
+    case "hosts_add": {
+      const list = args.list as "auto" | "manual";
+      lists[list] = [...new Set([...lists[list], ...(args.hosts as string[])])];
+      return out(undefined);
+    }
+    case "hosts_remove": {
+      const list = args.list as "auto" | "manual";
+      lists[list] = lists[list].filter((h) => !(args.hosts as string[]).includes(h));
+      return out(undefined);
+    }
+    case "hosts_check": {
+      checkingUntil = Date.now() + 3000;
+      const dropped = lists.auto.slice(-1);
+      setTimeout(() => {
+        lists.auto = lists.auto.filter((h) => !dropped.includes(h));
+        lastCheck = { at: Math.floor(Date.now() / 1000), dropped };
+      }, 3000);
+      return out(undefined);
+    }
     case "starter_config":
       return out(CANDIDATES[3].config);
     case "preview_config":

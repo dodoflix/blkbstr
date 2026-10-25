@@ -20,6 +20,11 @@ tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+[target.'cfg(any(target_os = "linux", windows))'.dependencies]
+# SO_MARK (Linux) and the TTL set before connecting (Windows), so the periodic check can probe
+# without the strategy; std can set neither before the first packet leaves.
+socket2 = { version = "0.6", features = ["all"] }
+
 [target.'cfg(unix)'.dependencies]
 flate2 = { workspace = true }
 tar = { workspace = true }

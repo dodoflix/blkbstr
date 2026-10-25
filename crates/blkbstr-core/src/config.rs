@@ -22,6 +22,15 @@ pub struct Config {
     pub notes: Option<String>,
     #[serde(default = "default_compat")]
     pub compat: u32,
+    /// Apply strategies only to hosts the engine has seen fail (nfqws2's `--hostlist-auto`), so
+    /// traffic to sites that are not blocked is left alone. Covers the strategies that have no
+    /// list of their own; see [`Strategy::takes_hostlists`].
+    #[serde(default = "default_true")]
+    pub auto_hostlist: bool,
+    /// Apply strategies only to hosts on the user's own list. Combines with `auto_hostlist`: a host
+    /// on either list gets the strategy. With both off, strategies apply to everything.
+    #[serde(default)]
+    pub manual_hostlist: bool,
     #[serde(default)]
     pub strategies: Vec<Strategy>,
 }
@@ -102,8 +111,26 @@ impl Config {
             name: name.into(),
             notes: None,
             compat: NFQWS2_COMPAT_VER,
+            auto_hostlist: true,
+            manual_hostlist: false,
             strategies: Vec::new(),
         }
+    }
+
+    /// True when the engine will keep a learned-hosts list for this config.
+    pub fn uses_auto_hostlist(&self) -> bool {
+        self.auto_hostlist && self.any_takes_hostlists()
+    }
+
+    /// True when strategies are restricted to the user's own list.
+    pub fn uses_manual_hostlist(&self) -> bool {
+        self.manual_hostlist && self.any_takes_hostlists()
+    }
+
+    fn any_takes_hostlists(&self) -> bool {
+        self.strategies
+            .iter()
+            .any(|s| s.enabled && s.takes_hostlists())
     }
 
     pub fn from_json(s: &str) -> Result<Self, serde_json::Error> {
@@ -157,6 +184,13 @@ impl Strategy {
             filter: Filter::default(),
             actions: Vec::new(),
         }
+    }
+
+    /// A strategy that already names its own hostlist or ipset has chosen who it applies to, and
+    /// an automatic list on top would change that choice.
+    pub fn takes_hostlists(&self) -> bool {
+        let f = &self.filter;
+        f.hostlist.is_none() && f.hostlist_auto.is_none() && f.ipset.is_none()
     }
 
     fn validate(&self) -> Result<(), ConfigError> {
@@ -358,6 +392,32 @@ mod tests {
         s.actions.push(Action::new("fake --qnum=1"));
         cfg.strategies.push(s);
         assert!(matches!(cfg.validate(), Err(ConfigError::BadToken { .. })));
+    }
+
+    #[test]
+    fn auto_hostlist_is_on_unless_the_file_says_otherwise() {
+        let on = Config::from_json(r#"{"name":"x","strategies":[{"name":"s"}]}"#).unwrap();
+        assert!(on.auto_hostlist && on.uses_auto_hostlist());
+        let off =
+            Config::from_json(r#"{"name":"x","auto_hostlist":false,"strategies":[{"name":"s"}]}"#)
+                .unwrap();
+        assert!(!off.uses_auto_hostlist());
+    }
+
+    #[test]
+    fn the_own_list_is_off_unless_the_file_says_otherwise() {
+        let cfg = Config::from_json(r#"{"name":"x","strategies":[{"name":"s"}]}"#).unwrap();
+        assert!(!cfg.manual_hostlist && !cfg.uses_manual_hostlist());
+        let on =
+            Config::from_json(r#"{"name":"x","manual_hostlist":true,"strategies":[{"name":"s"}]}"#)
+                .unwrap();
+        assert!(on.uses_manual_hostlist());
+    }
+
+    #[test]
+    fn a_strategy_with_its_own_list_does_not_take_the_automatic_one() {
+        // sample() is bound to a hostlist file, so nothing is left for the automatic list to do.
+        assert!(!sample().uses_auto_hostlist());
     }
 
     #[test]

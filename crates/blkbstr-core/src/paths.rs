@@ -62,6 +62,17 @@ pub fn state_dir() -> PathBuf {
     }
 }
 
+/// Hosts the engine has seen fail (`--hostlist-auto`), which it appends to at runtime. Under the
+/// state directory so it survives a reboot.
+pub fn auto_hostlist() -> PathBuf {
+    state_dir().join("autohostlist.txt")
+}
+
+/// The user's own list of hosts to unblock (`--hostlist`), which the engine only reads.
+pub fn manual_hostlist() -> PathBuf {
+    state_dir().join("hostlist.txt")
+}
+
 /// Runtime scratch (parameter file, engine pidfile), cleared on reboot. `BLKBSTR_RUNTIME_DIR` overrides it.
 pub fn runtime_dir() -> PathBuf {
     if let Ok(custom) = std::env::var("BLKBSTR_RUNTIME_DIR") {

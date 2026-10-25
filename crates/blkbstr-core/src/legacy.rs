@@ -17,6 +17,8 @@ pub fn parse(config_file: &str, name: &str) -> Result<Imported, String> {
     let filtering = shell_var(config_file, "MODE_FILTER").is_some_and(|m| m != "none");
 
     let mut config = Config::new(name);
+    // The profiles were written to apply to all traffic or to lists of the user's choosing.
+    config.auto_hostlist = false;
     let mut skipped = Vec::new();
     for (n, profile) in split_profiles(&opt).into_iter().enumerate() {
         let mut strategy = Strategy::new(format!("profile-{}", n + 1));

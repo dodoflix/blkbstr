@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import { median } from "./format";
+import { usesList, withMode, type HostMode } from "./hostmode";
+import { selectedHosts } from "./sites";
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
 /** Time for the engine to start reading the queue; the rules are in place when engineStart returns. */
 const SETTLE_MS = 600;
+
+/** Trials apply the strategy to every site: behind the learned list it would do nothing to the
+ *  sites being measured until they had failed enough times to be learned. */
+const trial = (config: api.Config): api.Config => withMode(config, "all");
 
 /** A candidate that filters ports the check never uses cannot change the result. */
 function measurable(config: api.Config): boolean {
@@ -104,11 +110,16 @@ export function useAutoConfig() {
   const [error, setError] = useState<string>();
   const [kept, setKept] = useState<string>();
   const [blockedCount, setBlockedCount] = useState(0);
+  const [mode, setMode] = useState<HostMode>("auto");
+  // Hosts a strategy can help with, to seed the lists so they work on the first visit.
+  const seed = useRef<string[]>([]);
   const [progress, setProgress] = useState<[number, number]>([0, 0]);
   const [measuring, setMeasuring] = useState(false);
   const [done, setDone] = useState(false);
   // A ref, not state: the walk reads it inside a loop that never re-renders.
   const cancelled = useRef(false);
+  // Starting from an effect can fire twice (strict mode, a quick re-render); one walk at a time.
+  const walking = useRef(false);
   // Ends with the screen that owns it; otherwise it would keep starting trial runs nobody can see.
   useEffect(() => () => void (cancelled.current = true), []);
 
@@ -116,6 +127,8 @@ export function useAutoConfig() {
     setSteps((prev) => prev.map((step) => (step.name === name ? { ...step, outcome, worked, unblocked } : step)));
 
   const run = async () => {
+    if (walking.current) return;
+    walking.current = true;
     cancelled.current = false;
     setRunning(true);
     setDone(false);
@@ -127,7 +140,12 @@ export function useAutoConfig() {
     setError(undefined);
     setKept(undefined);
     try {
-      const baseline = await api.checkReachability();
+      // With the engine on, blocked sites load, and the walk would find nothing to fix.
+      if ((await api.engineStatus()).running) {
+        setError("Blockbuster is on, which hides what is blocked. Turn it off, then start the search again.");
+        return;
+      }
+      const baseline = await api.checkReachability(await selectedHosts());
       if (!baseline.network_ok) {
         setError(
           `Even ${baseline.control.host} did not answer, so this is the network rather than a censor. Nothing can be measured until that is fixed.`,
@@ -139,6 +157,9 @@ export function useAutoConfig() {
       const unaffected = baseline.sites.filter((site) => site.verdict === "fine").map((site) => site.host);
       unaffected.push(baseline.control.host);
       setBlockedCount(blocked.length);
+      seed.current = baseline.sites
+        .filter((site) => ["tls_reset", "tls_silent", "tcp_blocked"].includes(site.verdict))
+        .map((site) => site.host);
       if (blocked.length === 0) {
         setNote("Every site on the list already loads. There is nothing to work around.");
         return;
@@ -158,7 +179,7 @@ export function useAutoConfig() {
         ]);
         let step: Step = { name: config.name, notes: config.notes, outcome: "", unblocked: 0, cost, config };
         try {
-          await api.engineStart(config, true);
+          await api.engineStart(trial(config), true);
         } catch (e) {
           // The engine refuses a config it cannot load before any rule is installed: skip it.
           finish(config.name, `the engine refused it: ${e}`);
@@ -194,7 +215,7 @@ export function useAutoConfig() {
           if (cancelled.current) break;
           setProgress([i + 1, shortlist.length]);
           try {
-            await api.engineStart(step.config, true);
+            await api.engineStart(trial(step.config), true);
             await sleep(SETTLE_MS);
             const after = await measure(unaffected);
             step.impact = { ...after, deltaMs: after.latencyMs - before.latencyMs };
@@ -234,6 +255,7 @@ export function useAutoConfig() {
     } catch (e) {
       setError(String(e));
     } finally {
+      walking.current = false;
       setMeasuring(false);
       setRunning(false);
     }
@@ -251,8 +273,13 @@ export function useAutoConfig() {
    *  config agree. */
   const keep = async (): Promise<boolean> => {
     if (!winner) return false;
-    const named = { ...winner, name: saveAs.trim() };
+    const named = withMode({ ...winner, name: saveAs.trim() }, mode);
     try {
+      // Before the start, so the list is already there when the engine reads it. A daemon that
+      // cannot take it is not a reason to lose the config.
+      for (const list of ["auto", "manual"] as const) {
+        if (usesList(mode, list)) await api.hostsAdd(list, seed.current).catch(() => undefined);
+      }
       await api.engineStart(named, true);
       await api.engineConfirm();
       await api.saveConfig(named);
@@ -277,6 +304,8 @@ export function useAutoConfig() {
     winner,
     saveAs,
     setSaveAs,
+    mode,
+    setMode,
     kept,
     done,
     run,
