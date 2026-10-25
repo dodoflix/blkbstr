@@ -1,8 +1,9 @@
 //! Windows Security flags the WinDivert driver that ships with the engine and removes it as it is
-//! written, so the install folder is excluded from scanning before anything lands in it. Only that
-//! one folder, only for an install the user asked for and was told about. Best effort: with another
-//! antivirus, or Tamper Protection on, the cmdlet fails and the install reports the block instead
-//! (see `zip_install`).
+//! written, so the downloaded archive (which carries that driver) and the install folder are
+//! excluded from scanning before they are read or written. Only those, only for an install the
+//! user asked for and was told about. Best effort: with another antivirus,
+//! or Tamper Protection on, the cmdlet fails and the install reports the block instead (see
+//! `zip_install`).
 
 use blkbstr_core::process;
 use std::path::Path;

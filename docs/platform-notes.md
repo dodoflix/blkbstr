@@ -92,10 +92,11 @@ remove it on uninstall and delete `C:\ProgramData\blkbstr`. The engine in Progra
 was installed by the wizard, not by the installer.
 
 **Antivirus.** Windows Security flags the WinDivert driver that ships with the engine and removes it
-as it is written. The engine install therefore excludes `C:\Program Files\zapret2` from Defender's
-scans first (`Add-MpPreference`), and uninstalling Blockbuster removes that exclusion when the
-engine there is one the wizard installed. With another antivirus, or Tamper Protection on, the
-exclusion cannot be set and the install says the file was blocked.
+as it is written, and refuses to read the downloaded archive that holds it ("os error 225"). The
+engine install therefore excludes the archive and `C:\Program Files\zapret2` from Defender's scans
+first (`Add-MpPreference`); the archive exclusion is dropped once it is read. Uninstalling Blockbuster
+removes the folder exclusion when the engine there is one the wizard installed. With another
+antivirus, or Tamper Protection on, the exclusion cannot be set and the install says the file was blocked.
 
 **Windows on ARM.** Not offered. Upstream's answer is the x64 build with a test-signed driver and
 Test Signing mode switched on, which is not something to do behind a button.
