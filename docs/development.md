@@ -81,9 +81,10 @@ packaging/windows/stage-daemon.ps1
 npm install; npm run tauri dev
 ```
 
-To work on the daemon without installing a service, run `cargo run -p blkbstr-daemon` from an
-elevated terminal (WinDivert needs administrator rights). The pipe then keeps its default access, so
-only your account can reach it. The installed service refuses to register from outside Program Files.
+To work on the daemon without installing a service, run `cargo run -p blkbstr-daemon -- --allow-sid
+<your SID>` from an elevated terminal (WinDivert needs administrator rights; `whoami /user` prints
+the SID). Without `--allow-sid` an elevated daemon is unreachable from the unelevated GUI. The
+installed service refuses to register from outside Program Files.
 
 The BSDs have no service installer yet; see [platform-notes.md](platform-notes.md).
 
