@@ -18,6 +18,8 @@ footer the major. While the version is below 1.0 a breaking change bumps the min
 Three files carry the version and Release Please updates all of them in the release pull request, so
 they cannot drift: `Cargo.toml` (`[workspace.package]`, plus the matching entries in `Cargo.lock`),
 `package.json` and `src-tauri/tauri.conf.json`. The list is in `release-please-config.json`.
+The `Cargo.lock` paths filter on `@.name.value`: Release Please's TOML parser wraps every value, so
+`@.name` matches nothing and the action only logs a warning.
 
 ## App updates
 
