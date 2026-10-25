@@ -1,3 +1,4 @@
+mod applog;
 mod configs;
 mod daemon;
 #[cfg(any(windows, test))]
@@ -129,7 +130,10 @@ async fn install_engine() -> Result<(), String> {
 /// Backs up an existing zapret2 install's config and imports it as a saved config.
 #[tauri::command]
 fn import_legacy() -> Result<configs::LegacyImport, String> {
-    configs::import_legacy()
+    applog::logged(
+        "importing the existing zapret2 config",
+        configs::import_legacy(),
+    )
 }
 
 /// Probes each host for a per-site verdict. Local only: nothing is uploaded. Runs on a pool thread
@@ -263,20 +267,28 @@ fn service_status() -> service::ServiceStatus {
 /// Registers the background helper. Windows only: it raises one UAC prompt.
 #[tauri::command]
 async fn service_install() -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(service::install)
+    tracing::info!("installing the background helper");
+    let result = tauri::async_runtime::spawn_blocking(service::install)
         .await
-        .map_err(|e| format!("the install did not finish: {e}"))?
+        .map_err(|e| format!("the install did not finish: {e}"))?;
+    applog::logged("installing the background helper", result)
 }
 
 /// Both prompt (polkit, or UAC for the start type); they fail rather than hang when no agent is running.
 #[tauri::command]
 fn service_set_enabled(enabled: bool) -> Result<(), String> {
-    service::set_enabled(enabled)
+    applog::logged(
+        "changing the start-at-boot setting",
+        service::set_enabled(enabled),
+    )
 }
 
 #[tauri::command]
 fn service_set_active(active: bool) -> Result<(), String> {
-    service::set_active(active)
+    applog::logged(
+        "starting or stopping the service",
+        service::set_active(active),
+    )
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -284,6 +296,7 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     work_around_webkit_dmabuf();
 
+    let _log = applog::init();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())

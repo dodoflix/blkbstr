@@ -29,7 +29,9 @@ async fn newer(app: &AppHandle) -> Result<Option<tauri_plugin_updater::Update>, 
 
 #[tauri::command]
 pub async fn check_app_update(app: AppHandle) -> Result<Option<AppUpdate>, String> {
-    Ok(newer(&app).await?.map(|u| AppUpdate {
+    let found = crate::applog::logged("checking for an app update", newer(&app).await)?;
+    tracing::info!(newer = ?found.as_ref().map(|u| &u.version), "checked for an app update");
+    Ok(found.map(|u| AppUpdate {
         version: u.version,
         notes: u.body,
         installable: installable(),
@@ -43,9 +45,13 @@ pub async fn install_app_update(app: AppHandle) -> Result<(), String> {
         return Err("this install is updated through its package, not from the app".into());
     }
     let update = newer(&app).await?.ok_or("already up to date")?;
-    update
-        .download_and_install(|_, _| {}, || {})
-        .await
-        .map_err(|e| e.to_string())?;
+    tracing::info!(version = %update.version, "installing the app update");
+    crate::applog::logged(
+        "installing the app update",
+        update
+            .download_and_install(|_, _| {}, || {})
+            .await
+            .map_err(|e| e.to_string()),
+    )?;
     app.restart()
 }

@@ -27,20 +27,31 @@ fn path_for(name: &str) -> Result<PathBuf, String> {
     if bad {
         return Err(format!("{name:?} is not a log file name"));
     }
-    Ok(paths::log_dir().join(name))
+    // The daemon's directory first; the app's own log lives in the per-user one.
+    let daemon = paths::log_dir().join(name);
+    Ok(match paths::app_log_dir().map(|d| d.join(name)) {
+        Some(app) if !daemon.exists() && app.exists() => app,
+        _ => daemon,
+    })
+}
+
+fn files_in(dir: &std::path::Path) -> Result<Vec<std::fs::DirEntry>, String> {
+    match std::fs::read_dir(dir) {
+        Ok(entries) => Ok(entries.filter_map(Result::ok).collect()),
+        // No directory means nothing has run yet, which is not an error worth a red banner.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(e) => Err(format!("{}: {e}", dir.display())),
+    }
 }
 
 pub fn list() -> Result<Vec<LogFile>, String> {
-    let dir = paths::log_dir();
-    let entries = match std::fs::read_dir(&dir) {
-        Ok(entries) => entries,
-        // No directory means nothing has run yet, which is not an error worth a red banner.
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(format!("{}: {e}", dir.display())),
-    };
+    let mut entries = files_in(&paths::log_dir())?;
+    if let Some(app) = paths::app_log_dir() {
+        entries.extend(files_in(&app).unwrap_or_default());
+    }
 
     let mut files: Vec<LogFile> = entries
-        .filter_map(Result::ok)
+        .into_iter()
         .filter(|e| e.path().is_file())
         .filter_map(|e| {
             let meta = e.metadata().ok()?;

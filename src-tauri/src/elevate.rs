@@ -38,11 +38,17 @@ pub fn daemon_path() -> Result<std::path::PathBuf, String> {
 /// Runs `program args...` as administrator and waits. `what` names the step for the error text.
 #[cfg(windows)]
 pub fn run(program: &std::path::Path, args: &[&str], what: &str) -> Result<(), String> {
+    tracing::info!(program = %program.display(), ?args, "asking for administrator permission");
     let out = blkbstr_core::process::command("powershell.exe")
         .args(["-NoProfile", "-NonInteractive", "-Command"])
         .arg(script(&program.display().to_string(), args))
         .output()
         .map_err(|e| format!("running powershell: {e}"))?;
+    tracing::info!(
+        code = ?out.status.code(),
+        stderr = %String::from_utf8_lossy(&out.stderr).trim(),
+        "the elevated step ended"
+    );
     match out.status.code() {
         Some(0) => Ok(()),
         Some(DISMISSED) => Err("the authorisation prompt was dismissed".into()),
