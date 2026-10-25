@@ -332,10 +332,10 @@ export function AppShell({
   // Collapsing with the pointer still over the rail must not make it spring open again; hover
   // only works once the pointer has left and come back.
   const [settled, setSettled] = useState(false);
-  const first = useRef(true);
+  const was = useRef(collapsed);
   useEffect(() => {
-    if (first.current) first.current = false;
-    else if (collapsed) setSettled(true);
+    if (collapsed && !was.current) setSettled(true);
+    was.current = collapsed;
   }, [collapsed]);
   useLayoutEffect(() => {
     key.current = scrollKey;
