@@ -11,6 +11,8 @@ mod install;
 #[cfg(windows)]
 #[path = "install_windows.rs"]
 mod install;
+#[cfg(unix)]
+mod install_service;
 #[cfg(windows)]
 mod job;
 mod supervisor;
@@ -46,6 +48,11 @@ fn main() -> Result<()> {
         Some("install-engine") => {
             let _log_guard = init_logging();
             return install_engine(argv.next());
+        }
+        #[cfg(unix)]
+        Some("install-service") => {
+            let _log_guard = init_logging();
+            return install_service::run();
         }
         #[cfg(windows)]
         Some("install-service") => return winservice::install(&Args::parse(argv)),

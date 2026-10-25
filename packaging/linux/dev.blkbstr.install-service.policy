@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD polkit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/software/polkit/policyconfig-1.dtd">
+<policyconfig>
+  <vendor>Blockbuster</vendor>
+  <vendor_url>https://github.com/dodoflix/blkbstr</vendor_url>
+
+  <!--
+    The GUI runs `pkexec /usr/lib/blockbuster/blkbstrd install-service` once to set up the helper.
+    Shipped by the deb and rpm only: it names the packaged copy, which `install-service` leaves
+    in place and does not rewrite. Always asks for a password: this installs a root service.
+  -->
+  <action id="dev.blkbstr.install-service">
+    <description>Install the Blockbuster helper service</description>
+    <message>Authentication is required to install the Blockbuster helper</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/blockbuster/blkbstrd</annotate>
+  </action>
+</policyconfig>

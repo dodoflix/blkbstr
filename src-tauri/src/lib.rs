@@ -5,6 +5,8 @@ mod daemon;
 mod elevate;
 mod engine_install;
 mod logs;
+#[cfg(not(windows))]
+mod pkexec;
 mod service;
 mod tray;
 mod update_watch;
@@ -272,7 +274,7 @@ fn service_status() -> service::ServiceStatus {
     service::status()
 }
 
-/// Registers the background helper. Windows only: it raises one UAC prompt.
+/// Registers the background helper. Raises one UAC prompt on Windows, one password prompt on Linux.
 #[tauri::command]
 async fn service_install() -> Result<(), String> {
     tracing::info!("installing the background helper");
