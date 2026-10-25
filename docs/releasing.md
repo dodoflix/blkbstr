@@ -52,7 +52,7 @@ One-time setup, and why a release fails without it:
   public half is served at `key.asc` and signs the apt and dnf metadata and `SHA256SUMS`. Lose the
   key and every user has to import a new one.
 - `AUR_SSH_PRIVATE_KEY` secret: an SSH key whose public half is on the maintainer's AUR account.
-  The first push creates the package.
+  The first push creates the package. Without it the AUR step is skipped.
 
 The repositories hold only the latest release: each run rebuilds them from that release's `.deb`
 and `.rpm`.
