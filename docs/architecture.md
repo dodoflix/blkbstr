@@ -6,7 +6,7 @@
 ┌──────────────────────────────┐        ┌──────────────────────────────┐
 │  blkbstr  (unprivileged)     │        │  blkbstrd  (root / SYSTEM)   │
 │                              │        │                              │
-│  React + Radix Themes        │        │  socket server               │
+│  React + src/ui design system│        │  socket server               │
 │      │ invoke()              │        │      │                       │
 │  src-tauri                   │        │  engine.rs   (supervisor)    │
 │   ├ daemon.rs  ──────────────┼── JSON ┼─▶ nfqws2 / winws2 / dvtws2   │
@@ -114,8 +114,9 @@ the hosts they saw, so the user reads it before deciding to send it anywhere.
 
 ## Frontend
 
-React with Radix Themes. Component-level props and theme tokens carry the styling; there is no
-Tailwind and no CSS framework to learn. See [adr/0003-radix-themes-over-shadcn.md](adr/0003-radix-themes-over-shadcn.md).
+React over our own design system in `src/ui`, built on Radix Primitives for behaviour. Tokens carry
+the styling; there is no Tailwind and no CSS framework. See
+[design-system.md](design-system.md) and [adr/0003-own-design-system-on-radix-primitives.md](adr/0003-own-design-system-on-radix-primitives.md).
 
 `src/api.ts` is the only file that calls `invoke`. It is a hand-written mirror of the Tauri
 commands, so a signature change in Rust is a compile error in exactly one place.

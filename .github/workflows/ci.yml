@@ -20,7 +20,7 @@ env:
 
 jobs:
   # The portable crates. No system packages, so this reports quickly whatever the package mirrors
-  # are doing — and it holds every test.
+  # are doing - and it holds every test.
   #
   # Both platforms, because `blkbstr-daemon` has `#[cfg(unix)]` / `#[cfg(not(unix))]` branches for
   # the socket: the Windows named-pipe path is only compiled by the Windows leg.
@@ -32,11 +32,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
           components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
       - run: cargo fmt --all -- --check
       - run: cargo clippy -p blkbstr-core -p blkbstr-daemon --all-targets -- -D warnings
@@ -46,8 +49,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -66,11 +71,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-latest'
-        # webkit2gtk pulls in gstreamer and a lot else — 179 packages, and none of them are on the
+        # webkit2gtk pulls in gstreamer and a lot else - 179 packages, and none of them are on the
         # runner image. Bounded so a mirror that stops answering fails the job instead of sitting
         # on a runner for half an hour.
         timeout-minutes: 15
@@ -90,11 +97,12 @@ jobs:
             libssl-dev \
             build-essential
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
+          toolchain: stable
           components: clippy
-      - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-node@v7
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -111,10 +119,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Installer scripts parse
-        run: sh -n packaging/linux/install.sh && sh -n packaging/linux/uninstall.sh && sh -n scripts/dev-daemon.sh
+        run: for f in packaging/linux/install.sh packaging/linux/uninstall.sh scripts/*.sh .githooks/*; do sh -n "$f"; done
 
       - name: systemd unit parses
         run: |
@@ -139,7 +149,7 @@ jobs:
 
       - name: SELinux module links against the targeted policy
         # In a Fedora container because that is where SELinux users are, and because linking is
-        # what catches an interface or type that does not exist — compiling alone does not.
+        # what catches an interface or type that does not exist - compiling alone does not.
         run: |
           docker run --rm -v "$PWD/packaging/linux/selinux:/policy:ro" fedora:41 sh -c '
             set -eu

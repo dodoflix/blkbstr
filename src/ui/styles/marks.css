@@ -1,0 +1,180 @@
+.ui-mark {
+  flex: none;
+  color: var(--tone);
+  transition: color var(--dur-2);
+}
+
+.ui-mark__shape {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ui-pop-in var(--dur-2) var(--ease-out);
+}
+
+.ui-mark__dash {
+  animation: ui-march-mark 1.2s linear infinite;
+}
+
+@keyframes ui-march-mark {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+/* Stamp: a bordered label set slightly off true. Lands only when `animate` is set. */
+.ui-stamp {
+  --stamp-size: var(--t-md);
+  display: inline-block;
+  position: relative;
+  padding: 0.3rem 0.75rem;
+  border: 2px solid var(--tone-text);
+  border-radius: var(--r-1);
+  color: var(--tone-text);
+  font-size: var(--stamp-size);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  transform: rotate(-3deg);
+  user-select: none;
+}
+
+.ui-stamp[data-animate] {
+  animation: ui-stamp-land var(--dur-3) var(--ease-out) both;
+}
+
+.ui-stamp[data-size="sm"] {
+  --stamp-size: var(--t-xs);
+  padding: 0.15rem 0.5rem;
+  border-width: 1.5px;
+}
+
+.ui-stamp[data-size="lg"] {
+  --stamp-size: var(--t-xl);
+  padding: 0.4rem 1.1rem;
+  border-width: 3px;
+}
+
+@keyframes ui-stamp-land {
+  from {
+    opacity: 0;
+    transform: rotate(-7deg) scale(1.25);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(-3deg) scale(1);
+  }
+}
+
+/* Steps: numbered squares; fill alone says where you are. */
+.ui-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ui-steps__item {
+  position: relative;
+}
+
+.ui-steps__btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.5rem 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: var(--ink-3);
+}
+
+.ui-steps__box {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-2);
+  background: var(--paper-0);
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+  font-weight: 650;
+  transition: background-color var(--dur-2), border-color var(--dur-2), color var(--dur-2);
+}
+
+.ui-steps__label {
+  transition: color var(--dur-2);
+}
+
+.ui-steps__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ui-steps__label {
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.ui-steps__desc {
+  font-size: var(--t-sm);
+  color: var(--ink-3);
+}
+
+button.ui-steps__btn {
+  cursor: pointer;
+}
+
+button.ui-steps__btn:hover .ui-steps__label {
+  color: var(--accent);
+}
+
+button.ui-steps__btn:hover .ui-steps__box {
+  border-color: var(--accent);
+}
+
+.ui-steps__item[data-place="done"] .ui-steps__box {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.ui-steps__item[data-place="current"] .ui-steps__box {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ui-steps__item[data-place="done"] .ui-steps__label,
+.ui-steps__item[data-place="current"] .ui-steps__label {
+  color: var(--ink-1);
+}
+
+.ui-steps[data-orientation="horizontal"] {
+  flex-direction: row;
+  align-items: center;
+}
+
+.ui-steps[data-orientation="horizontal"] .ui-steps__item {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.ui-steps[data-orientation="horizontal"] .ui-steps__item:last-child {
+  flex: none;
+}
+
+.ui-steps[data-orientation="horizontal"] .ui-steps__btn {
+  width: auto;
+}
+
+.ui-steps[data-orientation="horizontal"] .ui-steps__desc,
+.ui-steps[data-orientation="horizontal"] .ui-steps__item:not([data-place="current"]) .ui-steps__text {
+  display: none;
+}

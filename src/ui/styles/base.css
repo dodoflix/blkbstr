@@ -1,0 +1,288 @@
+/* Reset plus the browser surfaces nobody draws: selection, caret, scrollbars, focus, numerals. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper-1);
+  color: var(--ink-1);
+  font-family: var(--font-ui);
+  font-size: var(--t-md);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden; /* the app shell owns scrolling */
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  text-wrap: balance;
+  letter-spacing: -0.015em;
+  line-height: var(--lh-tight);
+}
+
+p {
+  text-wrap: pretty;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+input,
+textarea {
+  caret-color: var(--accent);
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--r-1);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-3);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Tone: any element can carry data-tone and every component reads the same four variables. */
+[data-tone="neutral"],
+:root {
+  --tone: var(--ink-1);
+  --tone-text: var(--ink-1);
+  --tone-hover: var(--ink-2);
+  --tone-soft: var(--paper-2);
+  --tone-line: var(--line-strong);
+  --tone-on: var(--ink-inverse);
+}
+
+[data-tone="accent"] {
+  --tone: var(--accent);
+  --tone-text: var(--accent);
+  --tone-hover: var(--accent-hover);
+  --tone-soft: var(--accent-soft);
+  --tone-line: var(--accent-line);
+  --tone-on: var(--on-accent);
+}
+
+[data-tone="ok"] {
+  --tone: var(--ok);
+  --tone-text: var(--ok);
+  --tone-hover: var(--ok);
+  --tone-soft: var(--ok-soft);
+  --tone-line: var(--ok);
+  --tone-on: var(--on-solid);
+}
+
+[data-tone="warn"] {
+  --tone: var(--warn);
+  --tone-text: var(--warn);
+  --tone-hover: var(--warn);
+  --tone-soft: var(--warn-soft);
+  --tone-line: var(--warn);
+  --tone-on: var(--on-solid);
+}
+
+[data-tone="danger"] {
+  --tone: var(--danger);
+  --tone-text: var(--danger);
+  --tone-hover: var(--danger);
+  --tone-soft: var(--danger-soft);
+  --tone-line: var(--danger);
+  --tone-on: var(--on-solid);
+}
+
+.ui-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ui-icon {
+  display: block;
+  flex: none;
+}
+
+/* One gentle entrance for a page or a step that appears: a short fade and a 4px rise. */
+.ui-page {
+  animation: ui-page-in var(--dur-2) var(--ease-out);
+}
+
+@keyframes ui-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* Pointer: chrome is not text. Anything that does something shows a pointer and cannot be
+   selected; text you may want to copy is selectable and shows the text cursor. */
+body {
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+button,
+summary,
+label[for],
+[role="button"],
+[role="tab"],
+[role="radio"],
+[role="switch"],
+[role="checkbox"],
+[role="menuitem"],
+[role="option"],
+[role="combobox"],
+[role="slider"],
+a[href] {
+  cursor: pointer;
+}
+
+button *,
+summary *,
+[role="tab"] *,
+[role="radio"] *,
+[role="menuitem"] *,
+[role="option"] *,
+a[href] * {
+  cursor: inherit;
+}
+
+button:disabled,
+[aria-disabled="true"],
+[data-disabled] {
+  cursor: not-allowed;
+}
+
+input,
+textarea,
+pre,
+code,
+.ui-log,
+.ui-notice__text,
+.ui-toast__desc,
+.ui-kv dd,
+.ui-code__pre,
+[data-selectable] {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+
+input[type="checkbox"],
+input[type="radio"],
+input[type="file"],
+input[type="search"] {
+  cursor: text;
+}
+
+@keyframes ui-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Small marks that appear on a state change (a tick, a dot) settle in rather than snap. */
+@keyframes ui-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}

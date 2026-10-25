@@ -1,0 +1,366 @@
+.ui-flex {
+  display: flex;
+  min-width: 0;
+}
+
+.ui-grid {
+  display: grid;
+  min-width: 0;
+}
+
+.ui-sheet {
+  background: var(--paper-0);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  min-width: 0;
+}
+
+.ui-sheet[data-variant="well"] {
+  background: var(--paper-2);
+  border-color: transparent;
+}
+
+.ui-sheet[data-padding="none"] {
+  padding: 0;
+}
+.ui-sheet[data-padding="sm"] {
+  padding: var(--s-2);
+}
+.ui-sheet[data-padding="md"] {
+  padding: var(--s-5);
+}
+.ui-sheet[data-padding="lg"] {
+  padding: var(--s-6);
+}
+
+.ui-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.ui-section__head,
+.ui-pagehead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+}
+
+.ui-section__titles,
+.ui-pagehead__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.ui-pagehead {
+  margin-bottom: var(--s-5);
+  min-height: 3rem;
+}
+
+.ui-pagehead__actions,
+.ui-section__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+
+.ui-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+
+.ui-scroll {
+  overflow: auto;
+  min-height: 0;
+}
+
+/* Shell */
+.ui-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ui-shell {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+
+.ui-titlebar {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: 2.5rem;
+  padding-left: var(--s-2);
+  background: var(--paper-1);
+  border-bottom: 1px solid var(--line);
+  user-select: none;
+  position: relative;
+  z-index: calc(var(--z-nav) + 1);
+}
+
+.ui-titlebar__fill {
+  flex: 1;
+  align-self: stretch;
+}
+
+.ui-wincontrols {
+  display: flex;
+  align-self: stretch;
+}
+
+.ui-wincontrols button {
+  display: grid;
+  place-items: center;
+  width: 2.875rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  transition: background-color var(--dur-1), color var(--dur-1);
+}
+
+.ui-wincontrols button:hover {
+  background: var(--veil-strong);
+  color: var(--ink-1);
+}
+
+.ui-wincontrols button[data-close]:hover {
+  background: var(--danger);
+  color: var(--on-solid);
+}
+
+.ui-frame {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-toast) + 2);
+  border: 1px solid var(--line);
+  pointer-events: none;
+}
+
+.ui-resize {
+  position: fixed;
+  z-index: calc(var(--z-toast) + 1);
+}
+
+.ui-resize[data-edge="North"],
+.ui-resize[data-edge="South"] {
+  left: 6px;
+  right: 6px;
+  height: 5px;
+  cursor: ns-resize;
+}
+.ui-resize[data-edge="East"],
+.ui-resize[data-edge="West"] {
+  top: 6px;
+  bottom: 6px;
+  width: 5px;
+  cursor: ew-resize;
+}
+.ui-resize[data-edge="North"] { top: 0; }
+.ui-resize[data-edge="South"] { bottom: 0; }
+.ui-resize[data-edge="East"] { right: 0; }
+.ui-resize[data-edge="West"] { left: 0; }
+.ui-resize[data-edge$="East"][data-edge^="North"], .ui-resize[data-edge$="West"][data-edge^="North"], .ui-resize[data-edge$="East"][data-edge^="South"], .ui-resize[data-edge$="West"][data-edge^="South"] {
+  width: 8px;
+  height: 8px;
+}
+.ui-resize[data-edge="NorthEast"] { top: 0; right: 0; cursor: nesw-resize; }
+.ui-resize[data-edge="NorthWest"] { top: 0; left: 0; cursor: nwse-resize; }
+.ui-resize[data-edge="SouthEast"] { bottom: 0; right: 0; cursor: nwse-resize; }
+.ui-resize[data-edge="SouthWest"] { bottom: 0; left: 0; cursor: nesw-resize; }
+
+/* The rail is always 13rem wide and is shown through a clip, so collapsing, expanding and the hover
+   peek change what is visible and never the layout: that keeps the animation on the compositor and
+   the icons exactly where they are. */
+.ui-side {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  width: 13rem;
+  padding: var(--s-4) var(--s-2);
+  background: var(--paper-1);
+  z-index: var(--z-nav);
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  clip-path: inset(0 0 0 0);
+  transition: clip-path var(--dur-3) var(--ease-out);
+}
+
+.ui-side__brand {
+  display: flex;
+  align-items: center;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+}
+
+.ui-side__nav {
+  flex: 1;
+}
+
+.ui-nav {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ui-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  height: var(--hit);
+  padding: 0 0.8125rem;
+  border: 0;
+  border-radius: var(--r-2);
+  background: transparent;
+  color: var(--ink-2);
+  font-weight: 560;
+  text-align: left;
+  transition: background-color var(--dur-1), color var(--dur-1);
+}
+
+.ui-nav__item > svg {
+  flex: none;
+}
+
+.ui-nav__item:hover {
+  background: var(--veil);
+  color: var(--ink-1);
+}
+
+.ui-nav__item[data-active] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.ui-nav__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity var(--dur-2) var(--ease-out);
+}
+
+.ui-main {
+  grid-column: 2;
+  grid-row: 1;
+  border-left: 1px solid var(--line);
+  overflow: auto;
+  min-height: 0;
+  scrollbar-gutter: stable both-edges;
+}
+
+.ui-main__inner {
+  padding: var(--s-6);
+}
+
+/* Collapsed rail: icons only. Chosen by the user, or automatically on a narrow window. Hovering it
+   opens it over the page. */
+.ui-shell[data-collapsed] {
+  grid-template-columns: 3.75rem minmax(0, 1fr);
+}
+
+.ui-shell[data-collapsed] .ui-side {
+  clip-path: inset(0 9.25rem 0 0);
+}
+
+.ui-shell[data-collapsed] .ui-nav__label {
+  opacity: 0;
+}
+
+.ui-shell[data-collapsed]:not([data-settled]) .ui-side:hover .ui-nav__label,
+.ui-shell[data-collapsed] .ui-side:has(:focus-visible) .ui-nav__label {
+  opacity: 1;
+  transition-delay: 120ms;
+}
+
+.ui-shell[data-collapsed]:not([data-settled]) .ui-side:hover,
+.ui-shell[data-collapsed] .ui-side:has(:focus-visible) {
+  clip-path: inset(0 0 0 0);
+  box-shadow: inset -1px 0 0 var(--line);
+  transition-delay: 120ms;
+}
+
+.ui-side__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+@media (max-width: 860px) {
+  .ui-main__inner {
+    padding: var(--s-5) var(--s-4);
+  }
+}
+
+/* Panel: a surface with its own scrolling body. */
+.ui-cols {
+  position: relative;
+}
+
+.ui-cols__item {
+  position: absolute;
+  min-width: 0;
+}
+
+.ui-panel {
+  --panel-max: max(14rem, calc(var(--cols-h, calc(100vh - 8rem)) - 6rem));
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--paper-0);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  overflow: hidden;
+}
+
+.ui-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.ui-panel__body {
+  flex: 1;
+  min-height: 0;
+  max-height: var(--panel-max);
+  overflow: auto;
+  padding: var(--s-2) var(--s-4);
+}
+
+.ui-panel__foot {
+  padding: var(--s-3) var(--s-4);
+  border-top: 1px solid var(--line);
+}
+
+.ui-grid--top {
+  align-items: start;
+}
+
+.gallery-gap {
+  margin: var(--s-4) 0;
+}

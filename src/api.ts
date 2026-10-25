@@ -1,5 +1,5 @@
 /** Typed mirror of the `#[tauri::command]`s in `src-tauri/src/lib.rs`. */
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./ipc";
 
 /** One `--lua-desync` call. Order within a strategy is significant. */
 export type Action = {
