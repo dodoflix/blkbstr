@@ -182,11 +182,9 @@ const levelOf = (line: string): Level => LEVEL_RULES.find(([re]) => re.test(line
 const LOG_ROW = 20;
 const LOG_OVERSCAN = 24;
 
-/** Reads a log as text: level colouring, line numbers, substring filter, follow-the-tail.
- *
- *  Only the rows in view are rendered, at a fixed height, because a log is thousands of lines and
- *  rendering all of them on every poll is what made the page stutter. Scrolling up pauses following
- *  and reaching the bottom again resumes it, reported through `onFollowChange`. */
+/** Reads a log as text with level colouring, line numbers, a substring filter and follow-the-tail.
+ *  Only the rows in view are rendered (thousands of lines made the page stutter). Scrolling up pauses
+ *  following and reaching the bottom resumes it, via `onFollowChange`. */
 export function LogViewer({
   text,
   filter = "",
@@ -418,14 +416,13 @@ export type RowItem = {
   active?: boolean;
 };
 
-/** A vertical list of rows: mark or icon, two lines of text, something on the right. The shape most
- *  lists in an app have, so build lists from this before inventing a new one. */
+/** A vertical list of rows: mark or icon, two lines of text, something on the right. */
 export function RowList({ items, label, empty }: { items: RowItem[]; label: string; empty?: ReactNode }) {
   if (items.length === 0) return <>{empty}</>;
   return (
     <ul className="ui-rows" aria-label={label}>
       {items.map((it) => {
-        // The click target is the text, not the whole row, so buttons in `trailing` are not nested in it.
+        // The click target is the text only, so buttons in `trailing` are not nested in it.
         const body = (
           <>
             {it.leading && <span className="ui-rows__lead">{it.leading}</span>}

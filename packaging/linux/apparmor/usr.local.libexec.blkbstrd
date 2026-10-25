@@ -29,7 +29,7 @@ profile blkbstrd /usr/local/libexec/blkbstrd flags=(attach_disconnected) {
   @{PROC}/@{pid}/exe r,
 
   # abstractions/base allows creating a unix socket but not binding, listening or accepting on
-  # one. Who may reach the socket stays a file question — mode 0660, group blkbstr.
+  # one. Who may reach the socket stays a file question - mode 0660, group blkbstr.
   unix (bind, listen, accept, connect, send, receive) type=stream,
 
   # The GUI's socket and the rendered parameter file.

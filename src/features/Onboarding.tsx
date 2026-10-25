@@ -1,8 +1,7 @@
 import { AppearanceForm, Button, ChoiceGrid, Field, Heading, Row, Sheet, Stack, Text } from "../ui";
 import { usePrefs } from "./prefs";
 
-/** First run: look and detail level are chosen before any setup, so the wizard is already in the
- *  user's own terms. Everything here is also in System, so skipping loses nothing. */
+/** First run: choose look and detail level before any setup. Everything here is also in System. */
 export function Onboarding() {
   const { advanced, setAdvanced, setOnboarded } = usePrefs();
   return (

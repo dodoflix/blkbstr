@@ -1,6 +1,5 @@
-/* Design tokens. Every colour, size, radius, shadow and duration used by src/ui comes from here;
-   components never hard-code a value. ThemeProvider sets data-theme (always resolved to light or
-   dark) and data-motion on <html>. */
+/* Design tokens: every colour, size, radius, shadow and duration in src/ui comes from here.
+   ThemeProvider sets data-theme (light or dark) and data-motion on <html>. */
 
 :root {
   color-scheme: light;

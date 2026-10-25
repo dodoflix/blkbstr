@@ -23,8 +23,8 @@ const SCREENS = {
 } as const;
 type ScreenKey = keyof typeof SCREENS;
 
-/** Real screens, rendered inert, over fixed fake backend state, so every situation can be looked at
- *  without producing it. For breakpoints use Viewports: media queries follow the window, not this frame. */
+/** Real screens, inert, over fixed fake backend state. Media queries follow the window, not this
+ *  frame; use Viewports for breakpoints. */
 export function Screens() {
   const [screen, setScreen] = useState<ScreenKey>("home");
   const [scenario, setScenario] = useState<Scenario>("on");

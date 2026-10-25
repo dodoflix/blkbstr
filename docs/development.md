@@ -1,5 +1,16 @@
 # Development
 
+## Layout
+
+```
+src/                    React frontend (src/ui is the design system)
+src-tauri/              GUI backend: Tauri commands, daemon client, config files
+crates/blkbstr-core/    Config model, Lua function registry, parameter-file renderer, protocol
+crates/blkbstr-daemon/  blkbstrd, the privileged helper: engine supervisor and nftables
+packaging/linux/        systemd unit, polkit action, install scripts
+docs/                   Plan, architecture, decisions
+```
+
 ## Building
 
 Needs Rust, Node and the [Tauri system dependencies](https://tauri.app/start/prerequisites/) for

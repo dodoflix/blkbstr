@@ -1,7 +1,5 @@
-//! Client side of the GUI ↔ daemon socket.
-//!
-//! One connection per request. The daemon is a service that may restart under the GUI at any
-//! time, so a long-lived connection would only mean reconnect logic for no gain.
+//! Client side of the GUI and daemon socket. One connection per request, since the daemon may
+//! restart under the GUI at any time.
 
 use blkbstr_core::paths;
 use blkbstr_core::protocol::{read_message, write_message, Request, Response};
@@ -53,9 +51,8 @@ fn connect() -> Result<Stream, Error> {
     })
 }
 
-/// Turns `Permission denied (os error 13)` into the one thing that fixes it. The socket's group is
-/// the authorization model, and `usermod -aG` does not touch a session that is already running, so
-/// a fresh install fails here until the user logs out and back in.
+/// Turns `Permission denied (os error 13)` into the fix: the socket's group is the authorisation
+/// model, and `usermod -aG` does not reach a session that is already running.
 #[cfg(unix)]
 fn group_hint(socket: &str) -> Option<String> {
     use std::os::unix::fs::MetadataExt;
@@ -69,11 +66,11 @@ fn group_hint(socket: &str) -> Option<String> {
     Some(if members.contains(&user) {
         format!(
             ". Your account is in the {group} group, but this session started before it was added \
-             — log out and back in"
+             - log out and back in"
         )
     } else {
         format!(
-            ". Your account is not in the {group} group — run \
+            ". Your account is not in the {group} group - run \
              `sudo usermod -aG {group} {user}`, then log out and back in"
         )
     })
@@ -84,8 +81,7 @@ fn group_hint(_socket: &str) -> Option<String> {
     None
 }
 
-/// Real and supplementary groups of this process, from `/proc`. `getgroups(2)` would need a libc
-/// dependency for one call, and every platform this branch runs on has `/proc/self/status`.
+/// Real and supplementary groups of this process, from `/proc`; avoids a libc dependency.
 #[cfg(unix)]
 fn process_groups() -> Option<Vec<u32>> {
     let status = std::fs::read_to_string("/proc/self/status").ok()?;

@@ -38,7 +38,7 @@ RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6 AF_PACKET
 RestrictNamespaces=yes
 LockPersonality=yes
 # MemoryDenyWriteExecute is deliberately absent. zapret2's attacks are Lua, and LuaJIT
-# mprotects its generated code executable, which the seccomp filter blocks — the engine
+# mprotects its generated code executable, which the seccomp filter blocks - the engine
 # dies with "runtime code generation failed, restricted kernel?" before it sees a packet.
 # The filter is inherited by children, so it cannot be kept for the daemon alone.
 

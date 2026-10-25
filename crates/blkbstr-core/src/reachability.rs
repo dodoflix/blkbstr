@@ -1,13 +1,7 @@
-//! Whether a site is reachable, and if not, what stopped it.
-//!
-//! This is onboarding's "check" step, and later the oracle auto-configuration measures against:
-//! apply a strategy, run this again, keep the strategy if the verdicts improved.
-//!
-//! Everything is done over plain TCP with no TLS library. The question is not "can this connection
-//! be completed" but "does the far end answer at all once a hostname has been named", and a
-//! handshake that gets as far as any TLS record coming back has already answered it. That keeps
-//! the check dependency-free and keeps it honest: nothing here can accidentally succeed because a
-//! TLS stack retried, fell back, or used a cached session.
+//! Whether a site is reachable, and if not, what stopped it. The check step of onboarding and the
+//! oracle auto-configuration measures against. Done over plain TCP with no TLS library: any TLS
+//! record coming back once a hostname is named means the far end answered, and a TLS stack that
+//! retried or reused a session could turn a blocked site into a working one.
 
 use serde::Serialize;
 use std::io::{ErrorKind, Read, Write};
@@ -15,7 +9,7 @@ use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::{Duration, Instant};
 
 /// Sites commonly interfered with, plus enough variety that one company's outage is not mistaken
-/// for censorship. Editable by the caller; this is only the default.
+/// for censorship.
 pub const DEFAULT_HOSTS: &[&str] = &[
     "www.youtube.com",
     "discord.com",
@@ -25,20 +19,17 @@ pub const DEFAULT_HOSTS: &[&str] = &[
     "rutracker.org",
 ];
 
-/// Reserved by IANA for documentation, serves TLS, and is of no interest to any censor. If this
-/// one fails the network is broken, which is a different problem with a different fix.
+/// Reserved by IANA for documentation, serves TLS, and no censor cares about it. If it fails, the
+/// network is broken.
 pub const CONTROL_HOST: &str = "example.com";
 
-/// The only port the check speaks on. A candidate that filters some other port cannot change what
-/// this measures, so the walk has nothing to learn by trying it.
+/// The only port the check speaks on; a candidate filtering another port cannot change the result.
 pub const PORT: u16 = 443;
-/// Long enough for a slow mobile link, short enough that a silently dropped connection does not
-/// hold the whole check open.
+/// Long enough for a slow mobile link, short enough that a silent drop does not hold the check.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Used while walking candidates rather than [`DEFAULT_TIMEOUT`]. A host that a strategy has
-/// unblocked answers in a fraction of a second; the rest of the wait is spent proving that a
-/// silent drop is still a silent drop, once per candidate.
+/// Used while walking candidates. A host a strategy has unblocked answers quickly; the rest of the
+/// wait only proves a silent drop is still a silent drop.
 pub const TRIAL_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -70,8 +61,7 @@ impl Verdict {
 pub struct SiteResult {
     pub host: String,
     pub verdict: Verdict,
-    /// The address tried, or why the verdict is what it is. Shown verbatim; this is the line that
-    /// makes a bug report worth reading.
+    /// The address tried, or why the verdict is what it is; shown verbatim.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     pub elapsed_ms: u64,
@@ -79,8 +69,8 @@ pub struct SiteResult {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Report {
-    /// False when even the control host failed — the network is down, not filtered. Every other
-    /// verdict in the report is meaningless when this is false.
+    /// False when even the control host failed: the network is down, not filtered, and every other
+    /// verdict is meaningless.
     pub network_ok: bool,
     pub control: SiteResult,
     pub sites: Vec<SiteResult>,
@@ -92,8 +82,7 @@ impl Report {
     }
 }
 
-/// Checks the control host and every site at once. Hosts are independent, and doing them in
-/// sequence would multiply the timeout by the length of the list.
+/// Checks the control host and every site concurrently, so the timeout is not multiplied by the list.
 pub fn check(hosts: &[String], timeout: Duration) -> Report {
     std::thread::scope(|scope| {
         let control = scope.spawn(move || check_host(CONTROL_HOST, timeout));
@@ -154,8 +143,7 @@ fn probe(host: &str, timeout: Duration) -> (Verdict, Option<String>) {
     probe_address(*address, host, timeout)
 }
 
-/// Split out from [`probe`] so the verdicts that depend on how a server behaves can be tested
-/// against a local socket instead of waiting for a real censor to appear.
+/// Split out from [`probe`] so verdicts that depend on server behaviour can be tested on a local socket.
 fn probe_address(address: SocketAddr, host: &str, timeout: Duration) -> (Verdict, Option<String>) {
     let mut stream = match TcpStream::connect_timeout(&address, timeout) {
         Ok(stream) => stream,
@@ -172,8 +160,7 @@ fn probe_address(address: SocketAddr, host: &str, timeout: Duration) -> (Verdict
             Verdict::TlsReset,
             Some(format!("{}: closed after the hello", address.ip())),
         ),
-        // 0x16 is a handshake record, 0x15 an alert. Either way something on the far end parsed
-        // the hello and replied, which is what "reachable" means here.
+        // 0x16 is a handshake record, 0x15 an alert; either means the far end parsed the hello.
         Ok(_) if head[0] == 0x16 => (Verdict::Fine, Some(address.ip().to_string())),
         Ok(_) if head[0] == 0x15 => (
             Verdict::Fine,
@@ -191,8 +178,7 @@ fn probe_address(address: SocketAddr, host: &str, timeout: Duration) -> (Verdict
     }
 }
 
-/// ASCII and within the DNS length limit. The hostname reaches a `u16` length field in the SNI
-/// extension and a system resolver, and both arrive here from whatever the user typed.
+/// ASCII and within the DNS length limit: the name reaches a `u16` SNI length and the resolver.
 fn check_hostname(host: &str) -> Result<(), &'static str> {
     if host.is_empty() || host.len() > 253 {
         return Err("a hostname is 1 to 253 characters");
@@ -206,8 +192,7 @@ fn check_hostname(host: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
-/// Nothing real is served from these, so a name that resolves to one has been answered by
-/// something other than its owner.
+/// Nothing real is served from these, so a name resolving to one was answered by something else.
 fn is_sinkhole(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
@@ -221,11 +206,8 @@ fn is_sinkhole(ip: IpAddr) -> bool {
     }
 }
 
-/// A TLS 1.2 ClientHello naming `host` in the SNI extension.
-///
-/// Hand-built rather than pulled from a TLS crate because the whole point is to control exactly
-/// what goes on the wire: this is the packet DPI inspects, and a library would be free to retry,
-/// fall back, or reuse a session and turn a blocked site into a working one.
+/// A TLS 1.2 ClientHello naming `host` in the SNI extension. Hand-built so exactly what DPI
+/// inspects is on the wire, with no retry, fallback or session reuse.
 fn client_hello(host: &str) -> Vec<u8> {
     let mut extensions = Vec::new();
     // server_name: the extension the whole check exists to send.
@@ -278,8 +260,8 @@ fn extend_ext(out: &mut Vec<u8>, kind: u16, body: impl FnOnce(&mut Vec<u8>)) {
     out.extend_from_slice(&inner);
 }
 
-/// Not a security value: the handshake is never completed and no key is derived from it. It varies
-/// only so that repeated checks do not look like one replayed packet to whatever is watching.
+/// Not a security value: the handshake never completes. It varies so repeated checks do not look
+/// like one replayed packet.
 fn random_32() -> [u8; 32] {
     use std::collections::hash_map::RandomState;
     use std::hash::{BuildHasher, Hasher};
@@ -298,8 +280,7 @@ mod tests {
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr, TcpListener};
 
-    /// Walks the bytes the way a server would, so a wrong length field fails here rather than
-    /// looking like a blocked site later.
+    /// Walks the bytes like a server would, so a wrong length field fails here.
     fn sni_from(hello: &[u8]) -> Option<String> {
         assert_eq!(hello[0], 0x16, "record type");
         let record_len = u16::from_be_bytes([hello[3], hello[4]]) as usize;
@@ -378,8 +359,7 @@ mod tests {
         assert!(check_hostname("host name").is_err());
     }
 
-    /// Answers the first connection with `behaviour`, so the verdicts that depend on how a server
-    /// behaves can be produced on demand rather than waiting for a censor to turn up.
+    /// Answers the first connection with `behaviour`, so server-dependent verdicts can be produced on demand.
     fn server(
         behaviour: impl FnOnce(TcpStream) + Send + 'static,
     ) -> (SocketAddr, std::thread::JoinHandle<()>) {
@@ -415,8 +395,7 @@ mod tests {
 
     #[test]
     fn an_alert_still_counts_as_an_answer() {
-        // Something parsed the hello and replied. Censors inject resets, not alerts, because an
-        // alert means tracking the TLS state they are trying to avoid parsing.
+        // Something parsed the hello and replied. Censors inject resets, not alerts.
         let (address, handle) = server(|mut stream| {
             swallow_hello(&mut stream);
             let _ = stream.write_all(&[0x15, 0x03, 0x03, 0x00, 0x02, 0x02, 0x28]);

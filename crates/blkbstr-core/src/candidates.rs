@@ -1,18 +1,12 @@
-//! Strategies to try, in the order worth trying them.
-//!
-//! The order is a heuristic and nothing more: it decides how *fast* auto-configuration finds an
-//! answer, never *whether* the answer is right. What a candidate is judged on is the reachability
-//! check run while it is applied, so a badly ranked list costs time and a wrong one costs nothing —
-//! the engine's own `--dry-run` refuses a candidate it cannot load before it reaches the network.
-//!
-//! Every function named here is in [`crate::registry::FUNCTIONS`], which the tests assert, so a
-//! typo is a build failure rather than a candidate that silently never works.
+//! Strategies to try, in the order worth trying them. The order only affects how fast
+//! auto-configuration finds an answer: each candidate is judged by the reachability check, and the
+//! engine refuses one it cannot load. Every function named here is in
+//! [`crate::registry::FUNCTIONS`], which the tests assert.
 
 use crate::config::{Action, Config, Filter, Strategy};
 
-/// Split positions, in the order zapret2's own `blockcheck2` sweeps them. A strategy is only as
-/// good as where it cuts, and `multisplit` with no `pos` splits after one byte, which almost
-/// nothing falls for.
+/// Split positions, in the order zapret2's `blockcheck2` sweeps them. `multisplit` without a
+/// `pos` splits after one byte, which almost nothing falls for.
 const TLS_POSITIONS: &[&str] = &[
     "1,midsld",
     "midsld",
@@ -25,15 +19,14 @@ const TLS_POSITIONS: &[&str] = &[
     "1,sniext+1,host+1,midsld-2,midsld,midsld+2,endhost-1",
 ];
 
-/// The positions worth combining with something else. Sweeping every fooling against all nine
-/// would be several hundred candidates, and blockcheck2 only reaches that many because it prunes
-/// as it goes — which this list cannot do, since the user chooses from the finished results.
+/// Positions worth combining with something else; all nine against every fooling would be several
+/// hundred candidates, and blockcheck2 only gets away with that by pruning.
 const TLS_KEY_POSITIONS: &[&str] = &["1,midsld", "midsld", "sniext+1"];
 
 const HTTP_POSITIONS: &[&str] = &["method+2,midsld", "midsld", "method+2"];
 
-/// `FOOLINGS46_TCP` from blockcheck2's `def.inc`: ways to build a packet the DPI accepts and the
-/// server throws away. Each is `(name, args)`, where args are appended to the action.
+/// `FOOLINGS46_TCP` from blockcheck2's `def.inc`: packets the DPI accepts and the server discards.
+/// Each is `(name, args)`, appended to the action.
 const FOOLINGS: &[(&str, &[(&str, &str)])] = &[
     ("md5", &[("tcp_md5", "")]),
     ("badsum", &[("badsum", "")]),
@@ -45,12 +38,9 @@ const FOOLINGS: &[(&str, &[(&str, &str)])] = &[
     ("syn", &[("tcp_flags_set", "SYN")]),
 ];
 
-/// Ordered most to least likely to be enough, and cheapest first within each family: the walk is
-/// stopped by the user, so what comes early is what a short run gets to try.
-///
-/// This is blockcheck2's sweep, narrowed. Its own search runs to several hundred combinations
-/// because it prunes after each stage ("do not test fakedsplit if multisplit works"); this list
-/// cannot prune, because every result is reported and the choice is the user's.
+/// Most likely to be enough first, cheapest first within each family, so a stopped walk has
+/// tried the likely ones. This is blockcheck2's sweep without its pruning: every result is
+/// reported and the user chooses.
 pub fn candidates() -> Vec<Config> {
     let mut out = Vec::new();
 
@@ -77,8 +67,8 @@ pub fn candidates() -> Vec<Config> {
         ));
     }
 
-    // A decoy in the gap, discarded somewhere between here and the server. This is the family that
-    // beats a DPI which reassembles the stream, so it gets the full fooling sweep.
+    // A decoy in the gap, discarded before the server. Beats a DPI that reassembles, so it gets
+    // the full fooling sweep.
     for function in ["fakedsplit", "fakeddisorder"] {
         for (fooling, args) in FOOLINGS {
             for pos in TLS_KEY_POSITIONS {
@@ -106,8 +96,8 @@ pub fn candidates() -> Vec<Config> {
         ));
     }
 
-    // The same decoy, expiring before it reaches the server. autottl finds the hop count itself;
-    // the fixed values are for when it guesses wrong.
+    // The same decoy, expiring before the server. autottl finds the hop count; fixed values cover
+    // when it guesses wrong.
     for delta in 1..=5 {
         out.push(tls(
             &name(&["fake", "autottl", &delta.to_string()]),
@@ -195,8 +185,7 @@ pub fn candidates() -> Vec<Config> {
         ),
     ]);
 
-    // HTTP. The reachability check speaks TLS only, so the walk cannot currently measure these —
-    // they are here so a config editor and an eventual HTTP probe have something to start from.
+    // HTTP. The reachability check only speaks TLS, so the walk cannot measure these yet.
     for function in ["multisplit", "multidisorder"] {
         for pos in HTTP_POSITIONS {
             out.push(http(
@@ -218,8 +207,8 @@ pub fn candidates() -> Vec<Config> {
     out
 }
 
-/// `pos` is the argument that decides where a split lands; every splitting function takes it and
-/// none of them do anything useful on their default of `2`.
+/// `pos` decides where a split lands; every splitting function takes it, and the default of `2`
+/// is rarely useful.
 fn split(function: &str, pos: &str) -> Action {
     Action::new(function).with("pos", pos)
 }
@@ -249,8 +238,7 @@ fn name(parts: &[&str]) -> String {
     out.trim_end_matches('-').to_owned()
 }
 
-/// Turns a position marker into something a user can read. Anything unrecognised is shown as is,
-/// which is better than pretending to explain it.
+/// Turns a position marker into something readable; unrecognised ones are shown as is.
 fn describe(pos: &str) -> String {
     match pos {
         "1,midsld" => "the domain name, and again at the start".into(),
@@ -266,15 +254,13 @@ fn describe(pos: &str) -> String {
     }
 }
 
-/// A candidate and what it costs to run. The cost only ever orders strategies that already work,
-/// so it can be a rough heuristic without being able to hide a working one.
+/// A candidate and what it costs to run. Cost only orders strategies that already work.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Candidate {
     pub config: Config,
     pub cost: u32,
 }
 
-/// The candidate list with each entry's cost.
 pub fn ranked() -> Vec<Candidate> {
     candidates()
         .into_iter()
@@ -285,12 +271,9 @@ pub fn ranked() -> Vec<Candidate> {
         .collect()
 }
 
-/// How much a strategy disturbs traffic beyond the minimum. Lower is gentler.
-///
-/// The weights say what they are paid for: injected packets are extra traffic that a middlebox or
-/// the server may take badly, a deliberately malformed one more so, and `wssize` is the only thing
-/// here that keeps costing throughput for the whole life of every connection it touches rather than
-/// only during the handshake.
+/// How much a strategy disturbs traffic beyond the minimum; lower is gentler. Injected packets are
+/// extra traffic, malformed ones more so, and `wssize` keeps costing throughput for the life of
+/// every connection it touches.
 pub fn cost(config: &Config) -> u32 {
     let mut cost = 0;
     for strategy in config.strategies.iter().filter(|s| s.enabled) {
@@ -379,9 +362,8 @@ mod tests {
             config
                 .validate()
                 .unwrap_or_else(|e| panic!("{}: {e}", config.name));
-            // An unknown function is passed through to the engine rather than refused, so a typo
-            // would otherwise become a candidate that quietly never works. Asked of the registry
-            // directly rather than by reading lint's prose, which is free to change.
+            // An unknown function is passed through to the engine, so a typo would become a
+            // candidate that quietly never works. Ask the registry, not lint's prose.
             for action in config.strategies.iter().flat_map(|s| &s.actions) {
                 assert!(
                     registry::function(&action.function).is_some(),
@@ -406,8 +388,7 @@ mod tests {
         }
     }
 
-    /// The ranking exists to prefer the gentler of two strategies that both work, so the ordering
-    /// between these three has to hold: splitting alone < injected decoys < a shrunken window.
+    /// The ranking prefers the gentler of two working strategies: splitting < decoys < shrunken window.
     #[test]
     fn cost_orders_gentle_below_invasive() {
         let by_name = |name: &str| {
@@ -450,8 +431,7 @@ mod render_tests {
         }
     }
 
-    /// Prints what every candidate becomes on the wire. Not an assertion — it is the artifact to
-    /// read when a candidate turns out not to work against a real engine.
+    /// Prints what every candidate becomes on the wire; read it when one fails against a real engine.
     #[test]
     #[ignore]
     fn show_the_cost_of_each_candidate() {
@@ -470,8 +450,7 @@ mod render_tests {
         }
     }
 
-    /// `--name` and not `--new`: profile 1 is already open, so `--new` would leave it empty, and an
-    /// empty profile matches every packet and passes it through untouched.
+    /// `--name` and not `--new`: profile 1 is already open and an empty profile matches everything.
     #[test]
     fn each_candidate_renders_one_profile_with_at_least_one_action() {
         for config in candidates() {

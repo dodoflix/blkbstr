@@ -1,12 +1,7 @@
 //! Linux packet interception: an nftables table that feeds traffic to the engine's NFQUEUE.
-//!
-//! Everything lives in one dedicated table, so teardown is `nft delete table inet blkbstr` — one
-//! atomic operation that cannot touch another program's rules. This is the whole reason for the
-//! separate table, and the reason iptables is not supported: there, rules from every program share
-//! the same chains, and removing ours means matching and deleting individual rules. Upstream's own
-//! guidance is to avoid iptables on any modern distribution.
-//!
-//! ponytail: nftables only. Add an iptables path if someone turns up on a kernel older than 5.15.
+//! Everything lives in one dedicated table, so teardown is one atomic `nft delete table inet
+//! blkbstr` that cannot touch another program's rules. iptables shares chains between programs and
+//! is not supported; add a path only for kernels older than 5.15.
 
 use anyhow::{bail, Context, Result};
 use std::io::Write;
@@ -15,21 +10,19 @@ use std::process::{Command, Stdio};
 /// Table name; also the handle used to tear everything down.
 const TABLE: &str = "blkbstr";
 
-/// Bit set on packets the engine emits, so the rules can skip them. Without it, generated packets
-/// re-enter the queue and the machine locks up. Matches nfqws2's `--fwmark` default.
+/// Bit set on packets the engine emits so the rules skip them; without it they re-enter the queue
+/// and the machine locks up. Matches nfqws2's `--fwmark` default.
 const FWMARK: &str = "0x40000000";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InterceptSpec {
-    /// Interface traffic leaves by. Interception is scoped to it so loopback and LAN traffic are
-    /// not queued into userspace for nothing.
+    /// Interface traffic leaves by; scoping to it keeps loopback and LAN traffic out of userspace.
     pub wan_iface: String,
     /// Comma-separated, already validated, e.g. `80,443`.
     pub tcp_ports: String,
     pub udp_ports: String,
     pub queue_num: u16,
-    /// How many packets from the start of a flow to intercept. Beyond this the engine has already
-    /// made its decision and queuing only costs CPU.
+    /// Packets from the start of a flow to intercept; past that the engine has decided.
     pub max_pkt_out: u16,
     pub max_pkt_in: u16,
 }
@@ -47,12 +40,9 @@ impl InterceptSpec {
     }
 }
 
-/// The nftables script, as fed to `nft -f -`. Pure, so the exact ruleset can be tested and shown
-/// to the user before anything is applied.
-///
-/// Follows the POSTNAT scheme from the zapret2 manual: outgoing traffic is intercepted after NAT
-/// so packets already carry their final source address, and `notrack` on the engine's own packets
-/// keeps NAT from dropping techniques that deliberately violate its expectations.
+/// The nftables script fed to `nft -f -`. Pure, so the ruleset can be tested and shown first.
+/// Follows the POSTNAT scheme from the zapret2 manual: outgoing traffic is intercepted after NAT,
+/// and `notrack` on the engine's own packets keeps NAT from dropping deliberately odd ones.
 pub fn ruleset(spec: &InterceptSpec) -> String {
     let InterceptSpec {
         wan_iface: wan,
@@ -64,8 +54,7 @@ pub fn ruleset(spec: &InterceptSpec) -> String {
     } = spec;
 
     let mut s = String::new();
-    // Idempotent: `add` creates the table if absent, `delete` then guarantees a clean slate even
-    // if a previous run died without tearing down.
+    // Idempotent: `add` creates the table if absent, `delete` then gives a clean slate.
     s.push_str(&format!("add table inet {TABLE}\n"));
     s.push_str(&format!("delete table inet {TABLE}\n"));
     s.push_str(&format!("add table inet {TABLE}\n"));
@@ -105,9 +94,8 @@ pub fn ruleset(spec: &InterceptSpec) -> String {
             "add rule inet {TABLE} pre iifname \"{wan}\" tcp sport {{ {tcp} }} \
              ct reply packets 1-{inp} queue num {q} bypass\n"
         ));
-        // Unquoted: the quotes in upstream's example are shell quoting. `nft -f -` reads this
-        // directly, and a quoted expression is parsed as a literal string, failing on the next
-        // token with "syntax error, unexpected queue".
+        // Unquoted: upstream's quotes are shell quoting; nft reads a quoted expression as a literal
+        // string and fails with "syntax error, unexpected queue".
         s.push_str(&format!(
             "add rule inet {TABLE} pre iifname \"{wan}\" tcp sport {{ {tcp} }} \
              tcp flags & (syn | ack) == (syn | ack) queue num {q} bypass\n"
@@ -129,9 +117,8 @@ pub fn ruleset(spec: &InterceptSpec) -> String {
     s
 }
 
-/// Owns the applied ruleset. Dropping it removes the table, so a panic or an early return cannot
-/// leave the machine with rules pointing at a queue nothing is reading — which is the failure that
-/// silently breaks a user's network.
+/// Owns the applied ruleset. Dropping it removes the table, so a panic or early return cannot leave
+/// rules pointing at a queue nothing reads.
 #[derive(Debug, Default)]
 pub struct Firewall {
     applied: bool,
@@ -142,8 +129,7 @@ impl Firewall {
         Self::default()
     }
 
-    /// Removes a table left behind by a previous run. Called at startup, because `Drop` cannot run
-    /// after SIGKILL or a power loss.
+    /// Removes a table left by a previous run; `Drop` cannot run after SIGKILL or power loss.
     pub fn clear_stale() {
         if delete_table().is_ok() {
             tracing::info!("removed a stale nftables table from a previous run");
@@ -160,7 +146,7 @@ impl Firewall {
             .stdin(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .context("running nft — is nftables installed?")?;
+            .context("running nft - is nftables installed?")?;
         child
             .stdin
             .take()
@@ -210,7 +196,7 @@ fn delete_table() -> Result<()> {
     }
 }
 
-/// Interface of the default route — the way out of this machine.
+/// Interface of the default route - the way out of this machine.
 pub fn default_route_iface() -> Result<String> {
     let out = Command::new("ip")
         .args(["route", "show", "default"])

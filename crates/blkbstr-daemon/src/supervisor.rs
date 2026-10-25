@@ -1,19 +1,15 @@
-//! Restart policy for an engine that exits by itself.
-//!
-//! Separated from [`crate::engine`] because the decision — restart, or give up and stay down — is
-//! the part worth testing, and it needs no process, no clock and no filesystem to test.
-//!
-//! Giving up matters as much as restarting. Each restart rewrites the nftables ruleset, so an
-//! engine that dies immediately on a bad config would otherwise thrash the firewall forever while
-//! the user watches their network flap.
+//! Restart policy for an engine that exits by itself. Separate from [`crate::engine`] so the
+//! decision needs no process, clock or filesystem to test. Giving up matters as much as
+//! restarting: each restart rewrites the ruleset, and an engine that dies on a bad config would
+//! otherwise thrash the firewall forever.
 
 use std::time::{Duration, Instant};
 
 /// Restarts allowed inside [`WINDOW`] before the supervisor stops trying.
 const MAX_RESTARTS: usize = 5;
 const WINDOW: Duration = Duration::from_secs(60);
-/// Delay before each restart, indexed by how many have already happened in the window. Capped
-/// rather than unbounded: a user waiting on their network is not served by a five-minute backoff.
+/// Delay before each restart, indexed by restarts already in the window. Capped: a five-minute
+/// backoff does not serve someone waiting on their network.
 const BACKOFF: [Duration; MAX_RESTARTS] = [
     Duration::from_secs(1),
     Duration::from_secs(2),
@@ -41,8 +37,7 @@ impl Supervisor {
         Self::default()
     }
 
-    /// Forgets the history. Called on a deliberate start or stop, so a user fixing their config is
-    /// not still being judged on the crash loop from before the fix.
+    /// Forgets the history, so a user fixing their config is not judged on the earlier crash loop.
     pub fn reset(&mut self) {
         self.restarts.clear();
     }

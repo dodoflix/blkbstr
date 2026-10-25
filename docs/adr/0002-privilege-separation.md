@@ -27,7 +27,7 @@ every toggle, which trains users to approve prompts reflexively, and a permanent
 `sudo` rule, which is a broader grant with no obvious way to revoke it. Removing someone from a
 group is a thing an administrator already knows how to do.
 
-The polkit action covers only enabling the service at boot — a genuinely administrative change —
+The polkit action covers only enabling the service at boot - a genuinely administrative change -
 rather than the day-to-day start/stop.
 
 ## Costs
@@ -45,10 +45,10 @@ that any local process can rewrite the firewall.
 
 ## Alternatives
 
-**One elevated process** — no IPC, but a root-owned browser engine.
+**One elevated process** - no IPC, but a root-owned browser engine.
 
-**`sudo` per action** — no daemon, but prompt fatigue and no persistent service to restart the
+**`sudo` per action** - no daemon, but prompt fatigue and no persistent service to restart the
 engine after a crash.
 
-**setuid helper binary** — smaller than a service, but no supervision, no state, and setuid
+**setuid helper binary** - smaller than a service, but no supervision, no state, and setuid
 binaries are their own well-documented category of mistake.

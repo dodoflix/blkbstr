@@ -74,14 +74,10 @@ const toPx = (length: string) => {
   return length.endsWith("rem") ? n * parseFloat(getComputedStyle(document.documentElement).fontSize) : n;
 };
 
-/** Fills the window the way a person would read it: down the first column until something would fall
- *  below the fold, and only then a second column, up to as many as `min` lets fit across. A page that
- *  fits in one column stays one column however wide the window is.
- *
- *  Children are placed with absolute positions from their measured heights rather than moved
- *  between wrappers, so none of them remount (and lose state) when the window is resized. Each
- *  panel in a column is told how tall the column is (`--cols-h`) so a long list scrolls inside its
- *  panel instead of pushing the layout past the fold. */
+/** Fills the window down the first column and starts another only when the next item would fall
+ *  below the fold, up to as many as `min` lets fit across. Items are positioned absolutely from
+ *  measured heights, not moved between wrappers, so none remount on resize. Each panel is told the
+ *  column height (`--cols-h`) so a long list scrolls inside its panel. */
 export function Columns({ min = "24rem", gap = 5, children }: { min?: string; gap?: Gap; children?: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const refs = useRef<(HTMLDivElement | null)[]>([]);
@@ -215,9 +211,8 @@ export function Section({
   );
 }
 
-/** A titled surface whose body scrolls on its own, so a long list never makes the page long: the
- *  header and everything around the panel stay in view. `maxHeight` caps the body (default: what
- *  fits in the window). */
+/** A titled surface whose body scrolls on its own, so a long list does not lengthen the page.
+ *  `maxHeight` caps the body (default: what fits in the window). */
 export function Panel({
   title,
   description,
@@ -329,8 +324,8 @@ export function AppShell({
   const main = useRef<HTMLElement>(null);
   const saved = useRef(new Map<string, number>());
   const key = useRef(scrollKey);
-  // Collapsing with the pointer still over the rail must not make it spring open again; hover
-  // only works once the pointer has left and come back.
+  // Collapsing with the pointer still over the rail must not reopen it; hover works again once the
+  // pointer has left.
   const [settled, setSettled] = useState(false);
   const was = useRef(collapsed);
   useEffect(() => {

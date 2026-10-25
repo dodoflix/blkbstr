@@ -4,8 +4,7 @@ import { Screens } from "./Screens";
 import { Tokens } from "./Tokens";
 import { Viewports } from "./Viewports";
 
-/** Dev builds only (see App.tsx). A place to look at everything the UI is made of, in both themes and
- *  motion settings, for regression. */
+/** Dev builds only (see App.tsx): every component, token, screen and window size, for regression. */
 export default function DeveloperPage() {
   const a = useAppearance();
   return (

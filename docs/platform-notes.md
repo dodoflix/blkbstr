@@ -8,7 +8,7 @@ Per-OS friction that will otherwise be rediscovered painfully, one platform at a
 rather than producing a broken install on OpenRC or runit. Non-systemd support means a second unit
 format and a second way to find the socket; it waits until someone asks.
 
-**Hardening.** The systemd unit drops to `CAP_CHOWN`, `CAP_NET_ADMIN` and `CAP_NET_RAW` —
+**Hardening.** The systemd unit drops to `CAP_CHOWN`, `CAP_NET_ADMIN` and `CAP_NET_RAW` -
 `CAP_CHOWN` for the one call that puts the socket in the `blkbstr` group, which fails with `EPERM`
 even as root once the bounding set is trimmed. AppArmor and SELinux profiles live in
 [packaging/linux/](../packaging/linux/README.md) and are loaded by hand, not by the installer.
@@ -16,8 +16,8 @@ Either LSM can refuse netlink and leave the daemon reporting `Operation not perm
 process running as root, so that error carries a note naming what could have refused it.
 
 Two systemd hardening options cannot be used, and both fail in ways that do not name themselves.
-`MemoryDenyWriteExecute=yes` kills LuaJIT — the attacks are Lua, and the engine exits with
-`runtime code generation failed, restricted kernel?` — and the seccomp filter is inherited by
+`MemoryDenyWriteExecute=yes` kills LuaJIT - the attacks are Lua, and the engine exits with
+`runtime code generation failed, restricted kernel?` - and the seccomp filter is inherited by
 children, so it cannot be kept for the daemon alone. `ProtectHome=yes` hides `/home`, so a config
 pointing `hostlist=` at a file the user can see is rejected as missing; the unit uses `read-only`
 instead, and SELinux gates the same thing behind `blkbstrd_read_user_content`.
@@ -26,7 +26,7 @@ instead, and SELinux gates the same thing behind `blkbstrd_read_user_content`.
 auto-detection will be wrong on derivatives and on anyone's carefully broken system.
 
 **Firewall backend.** nftables only. Everything goes in a dedicated `inet blkbstr` table, so
-teardown is one atomic `nft delete table` that cannot touch another program's rules — in iptables
+teardown is one atomic `nft delete table` that cannot touch another program's rules - in iptables
 every program shares the same chains and removal means matching individual rules. Upstream's own
 guidance is that iptables is legacy and post-NAT interception is impossible there. An iptables path
 is worth adding only for kernels older than 5.15 or `nft` older than 1.0.1, and only if someone
@@ -39,7 +39,7 @@ explicitly rather than letting the user read a stack trace.
 ## Windows
 
 **WinDivert.** A signed kernel driver. Loading it needs administrator rights and the signature has
-to stay valid — a driver-signing lapse breaks every install at once.
+to stay valid - a driver-signing lapse breaks every install at once.
 
 **No firewall rules.** `winws2` builds its own WinDivert filter from the profile filters, so there
 is nothing to install or tear down. The whole `firewall.rs` problem does not exist here, which
@@ -51,7 +51,7 @@ false-positive submission process to the major vendors starts *before* the M3 re
 least one vendor flags it anyway and document the exclusion steps.
 
 **Service.** One UAC-elevated installer step registers the Windows Service. The GUI then talks to
-it over a named pipe whose ACL must be restricted to the installing user's group — not yet
+it over a named pipe whose ACL must be restricted to the installing user's group - not yet
 implemented, and a release blocker for M3.
 
 ## FreeBSD and OpenBSD
@@ -68,9 +68,9 @@ equivalent of `firewall.rs`.
 
 The manual gives the reason: Apple removed `ipdivert` from the kernel and there is no replacement
 packet-interception facility. Supporting macOS would mean writing a Network Extension *and* a
-packet manipulator that upstream does not have — a different project, not a milestone of this one.
+packet manipulator that upstream does not have - a different project, not a milestone of this one.
 
-`Platform::current()` returns `None` there, and macOS is not built in CI — a green build for a
+`Platform::current()` returns `None` there, and macOS is not built in CI - a green build for a
 platform we cannot ship is minutes spent proving nothing.
 
 ## Distribution

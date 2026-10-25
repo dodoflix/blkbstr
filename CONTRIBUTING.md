@@ -98,13 +98,18 @@ offers the user a strategy that cannot work.
 - **Firewall teardown.** Rules must come down on stop, on `Drop`, and on the next startup after a
   kill that skipped both. A change to the engine backend that breaks any of the three strands
   people with a network that half works.
-- **Order of operations.** Validate, `--dry-run`, *then* rules, *then* the engine. On the way down,
+- **Order of operations.** Validate, check with `--intercept=0`, *then* rules, *then* the engine. On the way down,
   rules first. Rules pointing at a queue nothing reads is the state that breaks a machine.
 - **Socket permissions.** Anyone who can write the socket can rewrite the firewall.
 - **Config names.** They become filenames. `validate()` exists for a reason and both sides call it.
 - **Config values.** They become lines in the engine parameter file; a newline injects an arbitrary
   option into a root process. Configs arrive by import and by sync - treat them as untrusted.
 - **No telemetry.** Not off-by-default, not opt-in-later. Absent.
+
+## Scope
+
+See the [legal notice](LEGAL.md): changes that add attack tooling, bundle upstream strategy libraries or
+send data off the machine are declined.
 
 ## Reporting security problems
 

@@ -28,8 +28,7 @@ stop() {
     wait 2>/dev/null || true
 }
 
-# ponytail: polls mtimes once a second. inotify would need a tool that is not installed, and a
-# second of latency is invisible next to the build that follows it.
+# Polls mtimes once a second; inotify would need a tool that is not installed.
 wait_for_change() {
     stamp=$(mktemp)
     while [ -z "$(find crates src-tauri/src -name '*.rs' -newer "$stamp" -print -quit)" ]; do

@@ -4,12 +4,10 @@ import { median } from "./format";
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-/** The rules are already installed when engineStart returns; this is only for the engine to be
- *  reading the queue. Measured at well under 250ms, so this is mostly margin. */
+/** Time for the engine to start reading the queue; the rules are in place when engineStart returns. */
 const SETTLE_MS = 600;
 
-/** A candidate that filters ports the check never speaks on cannot change what the check measures,
- *  so trying it costs a full timeout to learn nothing. */
+/** A candidate that filters ports the check never uses cannot change the result. */
 function measurable(config: api.Config): boolean {
   return config.strategies.some(
     (s) => s.enabled && (s.filter.tcp ?? "").split(",").includes(api.PROBED_TCP_PORT),
@@ -39,10 +37,8 @@ export type Impact = {
   broke: string[];
 };
 
-/** Handshake time across hosts that already worked, and anything that stopped working.
- *
- *  Three rounds: one handshake is noisy enough to invent a difference that is not there. A host
- *  counts as broken only if it failed every round, so a single flap does not condemn a strategy. */
+/** Median handshake time across hosts that already worked, plus any that stopped working. Three
+ *  rounds because one handshake is noisy; a host counts as broken only if it failed all three. */
 async function measure(hosts: string[]): Promise<Omit<Impact, "deltaMs">> {
   const rounds: number[] = [];
   const failures = new Map<string, number>();
@@ -62,11 +58,8 @@ async function measure(hosts: string[]): Promise<Omit<Impact, "deltaMs">> {
   };
 }
 
-/** Best first: more sites through wins, then the strategy that disturbs traffic least, then the
- *  earlier one, which is the hand-ranked order.
- *
- *  Includes strategies that only got some of the sites through. When nothing gets everything, the
- *  one that gets most of it is still the best answer available, and hiding it helps nobody. */
+/** Best first: most sites through, then least disturbance, then the hand-ranked order. Partial
+ *  results count: when nothing gets everything, the best one is still the best answer. */
 export function rank(steps: Step[]): Step[] {
   return steps
     .filter((step) => step.unblocked > 0)
@@ -80,8 +73,8 @@ export function rank(steps: Step[]): Step[] {
     );
 }
 
-/** The measured cost of a strategy in one phrase. A handshake difference under 10ms is inside the
- *  noise of three rounds, so it is reported as no difference rather than as a small one. */
+/** The measured cost in one phrase. Under 10ms is inside the noise of three rounds, so it reads as
+ *  no difference. */
 export function impactLabel(impact: Impact): string {
   const { latencyMs, deltaMs, broke } = impact;
   const speed =
@@ -98,15 +91,10 @@ export function plainImpact(impact: Impact): string {
   return "No noticeable slowdown";
 }
 
-/** Tries every candidate and reports all of them that worked.
- *
- *  It does not stop at the first success: the first strategy that gets through is not necessarily
- *  the one to live with, and which trade-off is acceptable is the user's call, not a heuristic's.
- *
- *  The loop lives here rather than in the daemon because every step is already an ordinary
- *  start / check / stop: driving it from the UI costs no privileged surface, makes progress and
- *  cancellation free, and if this window dies mid-walk the trial run's own deadline puts the
- *  machine back. */
+/** Tries every candidate and reports all that worked; the first success is not necessarily the one
+ *  to live with. The loop lives in the UI because each step is an ordinary start, check and stop:
+ *  no privileged surface, cancellation for free, and the trial run's own deadline restores the
+ *  machine if the window dies. */
 export function useAutoConfig() {
   const [steps, setSteps] = useState<Step[]>([]);
   const [running, setRunning] = useState(false);
@@ -121,8 +109,7 @@ export function useAutoConfig() {
   const [done, setDone] = useState(false);
   // A ref, not state: the walk reads it inside a loop that never re-renders.
   const cancelled = useRef(false);
-  // A walk with nothing watching it would keep starting trial runs the user can neither see nor
-  // stop, so it ends with the screen that owns it.
+  // Ends with the screen that owns it; otherwise it would keep starting trial runs nobody can see.
   useEffect(() => () => void (cancelled.current = true), []);
 
   const finish = (name: string, outcome: string, worked = false, unblocked = 0) =>
@@ -148,8 +135,7 @@ export function useAutoConfig() {
         return;
       }
       const blocked = baseline.sites.filter((site) => site.verdict !== "fine").map((site) => site.host);
-      // The hosts a strategy is not supposed to change. They are what "did this make anything
-      // worse" is measured against, so the control host is in there even if nothing else is.
+      // What "did this make anything worse" is measured against; includes the control host.
       const unaffected = baseline.sites.filter((site) => site.verdict === "fine").map((site) => site.host);
       unaffected.push(baseline.control.host);
       setBlockedCount(blocked.length);
@@ -174,15 +160,13 @@ export function useAutoConfig() {
         try {
           await api.engineStart(config, true);
         } catch (e) {
-          // The engine refuses a config it cannot load before any rule is installed. That is a
-          // candidate to skip, not a reason to stop.
+          // The engine refuses a config it cannot load before any rule is installed: skip it.
           finish(config.name, `the engine refused it: ${e}`);
           continue;
         }
         await sleep(SETTLE_MS);
         const report = await api.checkReachability(blocked, api.TRIAL_TIMEOUT_MS);
-        // Always stop: every candidate is measured against the same untouched machine, and the
-        // one the user settles on is started again by name when they keep it.
+        // Always stop, so every candidate is measured against the same untouched machine.
         await api.engineStop();
 
         const unblocked = report.sites.filter((site) => site.verdict === "fine").length;
@@ -201,8 +185,7 @@ export function useAutoConfig() {
         skipped > 0
           ? ` ${skipped} that only touch other ports were skipped: the check speaks TLS on ${api.PROBED_TCP_PORT} and nothing else, so it could not tell whether they helped.`
           : "";
-      // Only what helped gets measured: it is three more checks per candidate, and a strategy that
-      // did not get anything through is not a choice however fast it is.
+      // Only what helped is measured (three more checks per candidate).
       const shortlist = rank(tried);
       if (shortlist.length > 0 && !cancelled.current) {
         setMeasuring(true);
@@ -264,8 +247,8 @@ export function useAutoConfig() {
     }
   };
 
-  /** Restarts under the chosen name before confirming, so the saved file, the running config and
-   *  the one that comes back at boot all say the same thing. */
+  /** Restarts under the chosen name before confirming, so the saved file, running config and boot
+   *  config agree. */
   const keep = async (): Promise<boolean> => {
     if (!winner) return false;
     const named = { ...winner, name: saveAs.trim() };

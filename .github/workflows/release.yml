@@ -1,7 +1,7 @@
 name: Release
 
-# Release Please keeps a release pull request open on main with the next version and changelog.
-# Merging it tags the release, and the job below builds and attaches the Linux artefacts to it.
+# Release Please keeps a release PR open on main; merging it tags the release and the job below
+# attaches the Linux artefacts.
 on:
   push:
     branches: [main]
@@ -32,8 +32,7 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  # Linux only. The Windows service does not exist yet, so a Windows build here would be an
-  # installer for an app with nothing to talk to.
+  # Linux only until there is a Windows service to install.
   linux:
     needs: release-please
     if: needs.release-please.outputs.created == 'true'
@@ -41,8 +40,7 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: write
-      # Both are for the provenance attestation; without them the signing step fails at the end of a
-      # long build rather than at the start.
+      # For the provenance attestation.
       id-token: write
       attestations: write
     steps:
@@ -60,9 +58,7 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          # azure.archive.ubuntu.com is the runner's default mirror and regularly Ign's every
-          # index, costing minutes of retries before apt falls back on its own. Go straight to the
-          # mirror it falls back to.
+          # The runner's default mirror often returns nothing and costs minutes of retries.
           echo 'http://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
           sudo apt-get update -o Acquire::Retries=3
           sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
@@ -91,8 +87,7 @@ jobs:
             \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \) -exec cp {} dist/ \;
           cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
 
-      # Sigstore-backed and keyless: ties each file to this workflow run and commit, with no
-      # signing key for anyone to lose or steal. Signing with a held key is a Windows job.
+      # Keyless Sigstore attestation: ties each file to this run and commit with no key to lose.
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |

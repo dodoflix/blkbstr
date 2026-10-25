@@ -1,5 +1,5 @@
-//! Saved configs. Plain JSON files in the user's config directory — no privileges involved, so
-//! the GUI reads and writes them itself and only hands the daemon a config when starting.
+//! Saved configs: plain JSON files in the user's config directory, read and written by the GUI;
+//! the daemon only receives a config at start.
 
 use blkbstr_core::{paths, Config};
 use std::path::PathBuf;

@@ -10,8 +10,7 @@ export function uptime(since: number, now = Date.now()): string {
   return `${Math.floor(seconds / 86400)}d`;
 }
 
-/** Coarse, because the status is polled every few seconds and a per-second countdown would
- *  visibly stutter. Approximate is honest here; the daemon holds the real deadline. */
+/** Coarse: the status is polled every few seconds, so a per-second countdown would stutter. */
 export function countdown(seconds: number): string {
   if (seconds >= 60) return `about ${Math.round(seconds / 60)} min`;
   return `${seconds}s`;

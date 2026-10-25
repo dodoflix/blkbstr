@@ -190,9 +190,8 @@
 .ui-resize[data-edge="SouthEast"] { bottom: 0; right: 0; cursor: nwse-resize; }
 .ui-resize[data-edge="SouthWest"] { bottom: 0; left: 0; cursor: nesw-resize; }
 
-/* The rail is always 13rem wide and is shown through a clip, so collapsing, expanding and the hover
-   peek change what is visible and never the layout: that keeps the animation on the compositor and
-   the icons exactly where they are. */
+/* The rail is always 13rem wide and revealed through a clip, so collapsing and the hover peek never
+   change the layout. */
 .ui-side {
   grid-column: 1;
   grid-row: 1;

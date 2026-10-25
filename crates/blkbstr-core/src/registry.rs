@@ -1,11 +1,6 @@
-//! What a config asks for versus what this build knows about.
-//!
-//! A profile's actions are portable across platforms by construction, because they are Lua rather
-//! than compiled-in flags. Only the *interception* layer differs (`--qnum` on Linux, `--wf-*` on
-//! Windows, `--port` on BSD), and none of that is user config — the daemon supplies it.
-//!
-//! So what is worth checking here is whether the Lua functions a config names actually exist. A
-//! misspelled `multispilt` is otherwise a strategy that silently does nothing.
+//! What a config asks for versus what this build knows about. Actions are Lua, so they are
+//! portable; only interception differs per platform and the daemon supplies that. What is worth
+//! checking is that the named Lua functions exist, since a misspelled one silently does nothing.
 
 use crate::config::Config;
 use serde::{Deserialize, Serialize};
@@ -20,9 +15,8 @@ pub enum Platform {
 }
 
 impl Platform {
-    /// The platform this binary was built for. macOS is absent on purpose: upstream does not
-    /// support it and does not expect to, because Apple removed `ipdivert` from the kernel and
-    /// there is no replacement packet-interception facility.
+    /// The platform this binary was built for. macOS is absent: upstream has no packet
+    /// interception there (Apple removed `ipdivert`).
     pub const fn current() -> Option<Self> {
         if cfg!(target_os = "linux") {
             Some(Platform::Linux)
@@ -65,9 +59,8 @@ pub struct FunctionSpec {
     pub category: Category,
 }
 
-/// The `zapret-antidpi.lua` surface, as documented in the zapret2 manual. Extending it is how a
-/// new upstream Lua function becomes selectable in the GUI; nothing here is rendered by name, so
-/// an out-of-date list costs a spurious warning rather than a broken config.
+/// The `zapret-antidpi.lua` surface from the zapret2 manual. An outdated list costs a spurious
+/// warning, not a broken config, since nothing is rendered from it by name.
 pub const FUNCTIONS: &[FunctionSpec] = &[
     spec("drop", Category::Base),
     spec("send", Category::Base),
@@ -122,8 +115,8 @@ pub struct Warning {
     pub message: String,
 }
 
-/// Reports what will not do what the config appears to say. Never an error: a config that warns
-/// still runs, and nfqws2's own `--dry-run` is the authority on whether it loads.
+/// Reports what will not do what the config appears to say. Never an error: nfqws2's own check
+/// decides whether a config loads.
 pub fn lint(config: &Config) -> Vec<Warning> {
     let mut out = Vec::new();
 

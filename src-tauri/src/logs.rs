@@ -1,17 +1,12 @@
-//! Reading the daemon's and engine's logs.
-//!
-//! Unprivileged: the daemon writes files under `log_dir()` and the GUI reads them directly, so
-//! nothing here goes over the socket. Tailing is a plain read of the last N bytes on a timer
-//! rather than a subscription — a log viewer refreshing every couple of seconds does not need
-//! framing and backpressure on the privileged side.
+//! Reading the daemon's and engine's logs. Unprivileged: the daemon writes files under `log_dir()`
+//! and the GUI tails the last bytes on a timer.
 
 use blkbstr_core::paths;
 use serde::Serialize;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 
-/// How much of a file the viewer will read. Enough to cover a crash and its lead-up; small enough
-/// that a log left running for a month does not become a 200 MB string in the webview.
+/// How much of a file the viewer reads: a crash and its lead-up, without a 200 MB string.
 const TAIL_BYTES: u64 = 256 * 1024;
 
 #[derive(Serialize)]
@@ -22,9 +17,7 @@ pub struct LogFile {
     pub modified: Option<u64>,
 }
 
-/// Rejects anything that is not a plain filename directly inside the log directory. The name comes
-/// from the UI, and the UI is not a trust boundary the way the daemon socket is — but a path
-/// traversal here would read arbitrary files as the user, so it is checked anyway.
+/// Rejects anything but a plain filename inside the log directory; the name comes from the UI.
 fn path_for(name: &str) -> Result<PathBuf, String> {
     let bad = name.is_empty()
         || name.contains(['/', '\\', '\0'])
@@ -91,9 +84,8 @@ pub fn tail(name: &str) -> Result<String, String> {
     Ok(text)
 }
 
-/// Writes one file containing everything a bug report needs, and returns its path so the UI can
-/// reveal it. Deliberately a file the user opens and can read before sending: engine logs name the
-/// hosts they saw, so this is not something to upload on the user's behalf.
+/// Writes one file with everything a bug report needs and returns its path. Not uploaded: engine
+/// logs name the hosts they saw, so the user reads it first.
 pub fn export(status: &str, logs: &[String]) -> Result<String, String> {
     let dir = paths::config_dir().ok_or("no user config directory on this platform")?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
