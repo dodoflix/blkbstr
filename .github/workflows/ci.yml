@@ -159,4 +159,4 @@ jobs:
         run: |
           sh packaging/windows/render.sh 1.2.3 https://example.test/setup.exe "$(printf 'ab%.0s' $(seq 32))" "$RUNNER_TEMP/pkg"
           for f in "$RUNNER_TEMP"/pkg/winget/*.yaml; do python3 -c 'import sys,yaml; yaml.safe_load(open(sys.argv[1]))' "$f"; done
-          xmllint --noout "$RUNNER_TEMP/pkg/chocolatey/blkbstr.nuspec"
+          python3 -c 'import sys,xml.dom.minidom as m; m.parse(sys.argv[1])' "$RUNNER_TEMP/pkg/chocolatey/blkbstr.nuspec"
