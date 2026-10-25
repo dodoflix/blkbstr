@@ -286,10 +286,24 @@ fn serve(conn: Stream, engine: &EngineSlot) -> Result<()> {
     let mut reader = BufReader::new(&conn);
     let mut writer = &conn;
     while let Some(request) = read_message::<Request>(&mut reader)? {
+        retry_missing_engine(engine);
         let response = handle(request, engine);
         write_message(&mut writer, &response)?;
     }
     Ok(())
+}
+
+/// The engine is installed from the GUI after the daemon is already up, so a failure at startup
+/// is looked at again on every request instead of sticking until the next restart.
+fn retry_missing_engine(slot: &EngineSlot) {
+    let mut slot = slot.lock().unwrap_or_else(|e| e.into_inner());
+    if slot.is_ok() {
+        return;
+    }
+    if let Some(mut engine) = Platform::current().and_then(|p| Engine::new(p).ok()) {
+        engine.restore();
+        *slot = Ok(engine);
+    }
 }
 
 fn handle(request: Request, engine: &EngineSlot) -> Response {
