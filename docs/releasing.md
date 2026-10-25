@@ -9,8 +9,7 @@ Releases are made by [Release Please](https://github.com/googleapis/release-plea
    and the changelog it generated from those commits.
 3. Merging that pull request tags `vx.y.z` and publishes the GitHub release. The same workflow then
    builds the Linux packages and `blkbstrd` and attaches them, with `SHA256SUMS`, to that release,
-   and in parallel the signed Windows installer with `SHA256SUMS-windows.txt` and the filled-in
-   winget and Chocolatey packages (`windows-packages.zip`).
+   and in parallel builds the Windows installer and attaches it.
 
 `feat` bumps the minor version, `fix` and `perf` the patch, and `feat!` or a `BREAKING CHANGE:`
 footer the major. While the version is below 1.0 a breaking change bumps the minor. `docs`,
@@ -34,33 +33,10 @@ That is authenticity of origin, and it is the check to point people at, because 
 build of the tool that gets around censorship" is an effective attack on exactly the people this
 project is for.
 
-Windows adds Authenticode on top, but **temporarily** there is no certificate, so the release job
-ships an unsigned installer (it logs a warning) and the release notes say so. Users are pointed at
-the attestation and `SHA256SUMS-windows.txt` instead. When a certificate exists, set these two
-repository secrets and the same job signs everything, then make the job fail without them (see the
-`TEMPORARY` comment in `release.yml`):
-
-| Secret | What |
-| --- | --- |
-| `WINDOWS_CERT_PFX_BASE64` | The code-signing certificate and key as a `.pfx`, base64-encoded |
-| `WINDOWS_CERT_PASSWORD` | Its password |
-
-`packaging/windows/sign.ps1` signs the daemon before it is bundled, and Tauri signs the app and the
-installer through it. With the secrets set, the job also checks every `.exe` it ships reports a
-valid signature.
-
-### Before the first Windows release
-
-Things only a person can do, in this order:
-
-1. Once available: get a code-signing certificate and set the two secrets. An EV certificate skips
-   most of SmartScreen's reputation wait; a standard one works but starts untrusted.
-2. Build a pre-release, run it on a real Windows 10 or 11 machine and go through the wizard once:
-   install the helper, install the engine, find a strategy, reboot, check it came back.
-3. Submit that build to the antivirus vendors, per [av-submission.md](av-submission.md).
-4. Publish the packages from `windows-packages.zip` by hand, per
-   [packaging/windows/README.md](../packaging/windows/README.md). The release workflow does not
-   publish them, because there are no winget or Chocolatey accounts yet.
+The Windows installer has none of this yet: it is neither code-signed nor attested, so SmartScreen
+warns on first run and antivirus tools are likelier to flag it ([av-submission.md](av-submission.md)).
+Signing, and the winget and Chocolatey packages, are planned (see "Ongoing" in
+[plan.md](plan.md)).
 
 ## What is not in a release
 

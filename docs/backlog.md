@@ -89,7 +89,7 @@ done in this repository.
 - [x] Config names validated before reaching the filesystem - M0
 - [x] No telemetry, of any kind, opt-in or otherwise - M0
 - [ ] Warn before enabling sync that a config reveals which sites the user visits - M4
-- [ ] Sign all binaries and installers - M3. The pipeline is wired and waits on a certificate; releases are unsigned until then
+- [ ] Sign all binaries and installers - ongoing (Windows installer is unsigned for now)
 - [x] Publish checksums and a verification procedure - M3
 
 ## Platform friction
@@ -103,7 +103,7 @@ done in this repository.
 ## Packaging & distribution
 
 - [ ] Flatpak, AUR, deb repo, AppImage - ongoing
-- [x] winget, Chocolatey packages built per release - M3. Published by hand until the accounts exist
+- [ ] winget, Chocolatey - ongoing
 - [ ] FreeBSD and OpenBSD ports - M5
 
 ## Project & process

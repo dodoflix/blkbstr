@@ -66,8 +66,8 @@ look for a Lua runtime or nftables on Windows.
 **Antivirus.** Anti-censorship tools get flagged as malware routinely: they inject packets, spoof
 TTLs and load a network driver, which is a fair description of malware if you are a heuristic. The
 submission process and the exclusion steps for users are in [av-submission.md](av-submission.md).
-Assume at least one vendor flags it anyway. Releases are unsigned for now, which makes that
-likelier and means SmartScreen warns on first run.
+Assume at least one vendor flags it anyway. Releases are not signed, which makes that likelier
+and means SmartScreen warns on first run.
 
 **Service.** `blkbstrd install-service --allow-sid <SID>`, run elevated by the GUI in one UAC
 prompt, registers an auto-start service as SYSTEM, restarts it after a crash, and does three things

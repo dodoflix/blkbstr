@@ -119,7 +119,7 @@ jobs:
           persist-credentials: false
 
       - name: Installer scripts parse
-        run: for f in packaging/linux/install.sh packaging/linux/uninstall.sh packaging/windows/render.sh scripts/*.sh .githooks/*; do sh -n "$f"; done
+        run: for f in packaging/linux/install.sh packaging/linux/uninstall.sh scripts/*.sh .githooks/*; do sh -n "$f"; done
 
       - name: systemd unit parses
         run: |
@@ -154,9 +154,3 @@ jobs:
             sesearch --type_trans -s init_t -t blkbstrd_exec_t -c process "$pol" | grep -q blkbstrd_t
             sesearch --type_trans -s blkbstrd_t -t iptables_exec_t -c process "$pol" | grep -q iptables_t
             sesearch -A -s blkbstrd_t -t blkbstrd_t -c netlink_netfilter_socket "$pol" | grep -q bind'
-
-      - name: Windows package templates fill in and parse
-        run: |
-          sh packaging/windows/render.sh 1.2.3 https://example.test/setup.exe "$(printf 'ab%.0s' $(seq 32))" "$RUNNER_TEMP/pkg"
-          for f in "$RUNNER_TEMP"/pkg/winget/*.yaml; do python3 -c 'import sys,yaml; yaml.safe_load(open(sys.argv[1]))' "$f"; done
-          python3 -c 'import sys,xml.dom.minidom as m; m.parse(sys.argv[1])' "$RUNNER_TEMP/pkg/chocolatey/blkbstr.nuspec"

@@ -100,12 +100,8 @@ through a wizard.
   and unpacked into Program Files after a UAC prompt.
 - [x] Windows Service installed by one UAC-elevated step; GUI talks to it over a named pipe with an
   ACL restricted to the installing user.
-- [x] Signed installer and binaries. Documented process for submitting to AV vendors, because
-  anti-censorship tooling gets false-positived as a matter of routine. *Temporary:* the signing
-  step is wired but waits on a certificate, so releases are unsigned (checksums and provenance
-  attestations only) until one exists.
-- [x] winget and Chocolatey packages. *Temporary:* they are built and attached to each release,
-  and submitted by hand until the accounts to publish them exist.
+- [x] Installer built and attached to each release. Documented process for submitting to AV
+  vendors, because anti-censorship tooling gets false-positived as a matter of routine.
 
 **Done when:** the same config file works on Windows and Linux.
 
@@ -132,7 +128,8 @@ Extension *and* a packet manipulator that does not exist upstream. That is a dif
 
 ### Ongoing
 
-Distribution packaging (Flatpak, AUR, deb repo, ports), contribution docs, and keeping the Lua
+Distribution packaging (Flatpak, AUR, deb repo, ports, winget, Chocolatey), Authenticode signing of
+the Windows installer and binaries, contribution docs, and keeping the Lua
 function registry in step as upstream zapret2 gains and loses functions.
 
 ## Standing constraints

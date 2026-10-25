@@ -119,13 +119,8 @@ jobs:
           sha256sum -c SHA256SUMS
           ```
 
-          The Windows installer is not code-signed yet, so Windows SmartScreen will warn about it.
-          Check it the same way, and compare it with `SHA256SUMS-windows.txt`:
-
-          ```powershell
-          gh attestation verify Blockbuster_*_x64-setup.exe -R dodoflix/blkbstr
-          (Get-FileHash Blockbuster_*_x64-setup.exe).Hash
-          ```
+          The Windows installer is not code-signed and has no attestation, so SmartScreen will warn
+          about it on first run.
 
           The zapret2 engine is not in here and is versioned separately: Blockbuster drives
           whichever one you have installed.
@@ -140,25 +135,10 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write
-      id-token: write
-      attestations: write
-    env:
-      TAG: ${{ needs.release-please.outputs.tag }}
-      WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
-      WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
     defaults:
       run:
         shell: pwsh
     steps:
-      # TEMPORARY: there is no code-signing certificate yet, so without the secrets this job
-      # ships an unsigned installer instead of failing. Once a certificate exists, replace this
-      # step with a hard failure when the secret is missing, drop the `SIGNED` conditions below,
-      # and update the release notes text further down and docs/releasing.md.
-      - name: Is there a signing certificate
-        run: |
-          $signed = [bool]$env:WINDOWS_CERT_PFX_BASE64
-          "SIGNED=$($signed.ToString().ToLower())" | Add-Content $env:GITHUB_ENV
-          if (-not $signed) { Write-Warning 'No signing certificate: the installer will be UNSIGNED' }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-please.outputs.tag }}
@@ -172,57 +152,12 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
-      - name: Build and stage the daemon
-        run: packaging/windows/stage-daemon.ps1 -Profile release
-      - name: Sign the daemon
-        if: env.SIGNED == 'true'
-        run: packaging/windows/sign.ps1 src-tauri/binaries/blkbstrd-x86_64-pc-windows-msvc.exe
-
+      - run: packaging/windows/stage-daemon.ps1 -Profile release
       - run: npm ci
-      - name: Build the installer
-        run: npm run tauri build
-      # Tauri calls the sign command on the app and on the installer it builds.
-      - name: Build and sign the installer
-        if: env.SIGNED == 'true'
-        run: |
-          $sign = @{ bundle = @{ windows = @{ signCommand = @{
-            cmd = 'pwsh'
-            args = @('-NoProfile', '-File', "$env:GITHUB_WORKSPACE/packaging/windows/sign.ps1", '%1')
-          } } } }
-          $sign | ConvertTo-Json -Depth 8 | Set-Content "$env:RUNNER_TEMP/sign.conf.json"
-          npm run tauri build -- --config "$env:RUNNER_TEMP/sign.conf.json"
-
-      - name: Collect the artefacts
-        run: |
-          New-Item -ItemType Directory dist | Out-Null
-          $installer = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
-          Copy-Item $installer dist/
-          if ($env:SIGNED -eq 'true') {
-            foreach ($f in Get-ChildItem dist/*.exe) {
-              $status = (Get-AuthenticodeSignature $f).Status
-              if ($status -ne 'Valid') { throw "$($f.Name) is not validly signed: $status" }
-            }
-          }
-          $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
-          "$hash  $($installer.Name)" | Set-Content dist/SHA256SUMS-windows.txt
-          "INSTALLER=$($installer.Name)", "SHA256=$hash" | Add-Content $env:GITHUB_ENV
-
-      # TEMPORARY: no winget or Chocolatey account exists yet, so nothing is published. The filled-in
-      # packages ride along on the release for a maintainer to submit by hand; once the accounts
-      # exist, replace this with steps that push them, gated on their secrets.
-      - name: Fill in the winget and Chocolatey packages
-        shell: bash
-        run: |
-          version=${TAG#v}
-          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${INSTALLER}"
-          sh packaging/windows/render.sh "$version" "$url" "$SHA256" packages
-          (cd packages && 7z a -tzip ../dist/windows-packages.zip winget chocolatey)
-
-      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-path: dist/*.exe
-
-      - name: Attach the artefacts to the release
+      # `tauri build` runs `npm run build` itself via beforeBuildCommand.
+      - run: npm run tauri build
+      - name: Attach the installer to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload $env:TAG (Get-ChildItem dist/*).FullName --clobber
+          TAG: ${{ needs.release-please.outputs.tag }}
+        run: gh release upload $env:TAG (Get-ChildItem target/release/bundle/nsis/*-setup.exe).FullName --clobber
