@@ -42,6 +42,15 @@ profile blkbstrd /usr/local/libexec/blkbstrd flags=(attach_disconnected) {
   /var/lib/blkbstr/ rw,
   /var/lib/blkbstr/** rw,
 
+  # `blkbstrd install-engine`, run through pkexec: unpack the pinned release it was handed from the
+  # user's cache directory.
+  /opt/zapret2/ rw,
+  /opt/zapret2/nfqws2 rw,
+  /opt/zapret2/nfqws2.blkbstr-new rw,
+  /opt/zapret2/lua/ rw,
+  /opt/zapret2/lua/* rw,
+  @{HOME}/.cache/blkbstr/downloads/* r,
+
   # Both speak netlink and nothing else, so they run inside this profile rather than needing one
   # each. `ix` keeps their capabilities bounded by ours.
   /{usr/,}{s,}bin/nft ix,

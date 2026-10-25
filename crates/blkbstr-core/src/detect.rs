@@ -237,7 +237,7 @@ fn package_manager_for(id: &str, id_like: Option<&str>) -> Option<PackageManager
 }
 
 /// Identified by its `config` file, the thing worth importing; a bare `nfqws2` on PATH is not an install.
-fn existing_install() -> Option<PathBuf> {
+pub fn existing_install() -> Option<PathBuf> {
     ["/opt/zapret2", "/usr/local/zapret2"]
         .iter()
         .map(Path::new)

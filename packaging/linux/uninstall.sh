@@ -8,6 +8,7 @@ set -eu
 systemctl disable --now blkbstrd.service 2>/dev/null || true
 rm -f /etc/systemd/system/blkbstrd.service \
       /usr/share/polkit-1/actions/dev.blkbstr.manage-service.policy \
+      /usr/share/polkit-1/actions/dev.blkbstr.install-engine.policy \
       /usr/local/libexec/blkbstrd \
       /etc/blkbstr/daemon.env
 rmdir /etc/blkbstr 2>/dev/null || true
@@ -17,5 +18,6 @@ systemctl daemon-reload
 # already-running desktop session cannot pick up, so every reinstall would cost the user a logout.
 # On its own it grants nothing: the socket it guards is gone with the service.
 rm -rf /var/lib/blkbstr
+echo "the zapret2 engine in /opt/zapret2 is left alone; it is not Blockbuster's to remove"
 echo "removed. logs remain in /var/log/blkbstr; per-user configs in ~/.config/blkbstr"
 echo "the blkbstr group is kept so a reinstall does not need a logout; drop it with: groupdel blkbstr"

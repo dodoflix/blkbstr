@@ -1,5 +1,6 @@
 mod configs;
 mod daemon;
+mod engine_install;
 mod logs;
 mod service;
 
@@ -81,6 +82,21 @@ fn engine_stop() -> Result<(), daemon::Error> {
 #[tauri::command]
 fn detect_environment() -> detect::Environment {
     detect::environment()
+}
+
+/// Downloads the pinned zapret2 release and installs it after a polkit prompt. Blocks for the
+/// download and for as long as the prompt is open, so it runs on a pool thread.
+#[tauri::command]
+async fn install_engine() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(engine_install::install)
+        .await
+        .map_err(|e| format!("the install did not finish: {e}"))?
+}
+
+/// Backs up an existing zapret2 install's config and imports it as a saved config.
+#[tauri::command]
+fn import_legacy() -> Result<configs::LegacyImport, String> {
+    configs::import_legacy()
 }
 
 /// Probes each host for a per-site verdict. Local only: nothing is uploaded. Runs on a pool thread
@@ -227,6 +243,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             daemon_info,
             detect_environment,
+            install_engine,
+            import_legacy,
             check_reachability,
             autoconfig_candidates,
             engine_status,

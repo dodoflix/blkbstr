@@ -9,12 +9,15 @@ done in this repository.
 - [x] Locate the engine binary; refuse by name when missing - M1
 - [x] Report the installed zapret2 version - M1
 - [x] Check for LuaJIT 2.1+ / Lua 5.3+ before anything else - M2
-- [ ] Engine installation per platform, with package-manager detection on Linux - M2 / M3
-- [ ] Linux distro and package-manager auto-detection - detected from `ID`/`ID_LIKE`; the
-      user-facing override is still missing - M2
-- [ ] First-run wizard: detect, install, check, auto-configure, re-runnable later - M2
-- [ ] Detect an existing zapret2 install, back up its config somewhere the user is told about,
-      import it as a preset named `Legacy` - M2
+- [ ] Engine installation on Linux: the pinned upstream release, hash-checked, installed after a
+      polkit prompt - M2
+- [ ] Engine installation on Windows - M3
+- [x] Linux distro detection from `ID`/`ID_LIKE`; shown in advanced mode, no longer needed to
+      install the engine - M2
+- [x] First-run wizard: detect, check, auto-configure, save, re-runnable later - M2
+- [x] Detect an existing zapret2 install - M2
+- [x] Back up the existing install's config somewhere the user is told about, import it as a
+      config named `Legacy` - M2
 
 ## Configuration management
 
@@ -24,7 +27,7 @@ done in this repository.
 - [x] Values validated against option injection into the parameter file - M1
 - [x] Parameter-file preview, so the UI can show what will actually run - M1
 - [x] Save, list and load named configs in the user's own directory - M0
-- [ ] Config editor UI with live linting - M2
+- [ ] Config editor UI with live linting - unscheduled
 - [x] Ephemeral "try it" mode with confirm-or-revert timeout - M2
 - [x] Auto-configuration: rank candidate strategies, apply each ephemerally, re-test, keep the
       first that works, save under a user-chosen name - M2. Built on our own reachability check
@@ -75,7 +78,7 @@ done in this repository.
 ## Appearance & UX
 
 - [x] Follows the OS light/dark setting - M0
-- [ ] Explicit light/dark override, persisted - M4
+- [x] Explicit light/dark override, persisted - M4
 - [ ] System tray / menu bar toggle with a status indicator - M4
 - [ ] Localisation - M4
 - [ ] Accessibility pass: keyboard navigation, screen reader labels, contrast - M4
@@ -108,6 +111,6 @@ done in this repository.
 - [x] CI: portable crates and frontend in a fast job, GUI build on Linux and Windows - M0
 - [x] MIT licence, matching upstream zapret2 - M0
 - [x] Contribution guidelines - M0
-- [ ] Code of conduct - ongoing
-- [ ] Issue and PR templates - ongoing
+- [x] Code of conduct - M0
+- [x] Issue and PR templates - M0
 - [x] Release process: tag-driven build, checksums, provenance attestation - M1

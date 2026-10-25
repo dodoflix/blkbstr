@@ -3,6 +3,8 @@
 
 mod engine;
 mod firewall;
+#[cfg(unix)]
+mod install;
 mod supervisor;
 
 use anyhow::{Context, Result};
@@ -24,6 +26,10 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MONITOR_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
 
 fn main() -> Result<()> {
+    let mut argv = std::env::args().skip(1);
+    if argv.next().as_deref() == Some("install-engine") {
+        return install_engine(argv.next());
+    }
     let args = Args::parse(std::env::args().skip(1));
     let _log_guard = init_logging();
 
@@ -55,6 +61,15 @@ fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Not the service: a one-shot the GUI runs through `pkexec`, so it has no socket and no engine.
+fn install_engine(tarball: Option<String>) -> Result<()> {
+    let tarball = tarball.context("usage: blkbstrd install-engine <tarball>")?;
+    #[cfg(unix)]
+    return install::run(std::path::Path::new(&tarball));
+    #[cfg(not(unix))]
+    anyhow::bail!("installing the engine is not supported on this platform yet ({tarball})")
 }
 
 /// Takes the engine and rules down before the process exits. The engine is a child outside our

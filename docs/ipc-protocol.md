@@ -80,4 +80,8 @@ privileged process in exchange for reading a file that is already readable.
 **Config storage.** Configs are user files the GUI owns. The daemon sees a config only as an
 argument to `start`, and never reads or writes the config directory.
 
-Both omissions are the same principle: the privileged surface stays at "start, stop, report".
+**Engine installation.** `blkbstrd install-engine` is a command-line one-shot run through `pkexec`,
+not a request: a socket operation is open to the whole `blkbstr` group, and writing an executable
+that later runs as root should ask for a password. See [architecture.md](architecture.md#installing-the-engine).
+
+All three omissions are the same principle: the privileged surface stays at "start, stop, report".
