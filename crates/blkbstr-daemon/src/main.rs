@@ -107,8 +107,8 @@ fn install_engine(tarball: Option<String>) -> Result<()> {
         Ok(()) => tracing::info!("engine installed"),
         Err(e) => tracing::error!(error = %format!("{e:#}"), "installing the engine failed"),
     }
-    // UAC gives the GUI no way to read this process's output, so the reason goes in a file next to
-    // the archive for it to pick up.
+    // UAC gives the GUI no way to read this process's output, so the reason goes in a file beside
+    // the path it passed for it to pick up.
     #[cfg(windows)]
     if let Err(e) = &result {
         std::fs::write(format!("{tarball}.err"), format!("{e:#}")).ok();
@@ -116,9 +116,15 @@ fn install_engine(tarball: Option<String>) -> Result<()> {
     result
 }
 
-#[cfg(any(unix, windows))]
+#[cfg(unix)]
 fn unpack_engine(tarball: &str) -> Result<()> {
     install::run(std::path::Path::new(tarball))
+}
+
+/// Windows downloads the archive itself; the argument only names where a failure reason goes.
+#[cfg(windows)]
+fn unpack_engine(_reason_anchor: &str) -> Result<()> {
+    install::run()
 }
 
 #[cfg(not(any(unix, windows)))]

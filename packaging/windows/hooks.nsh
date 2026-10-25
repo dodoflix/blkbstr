@@ -12,10 +12,19 @@
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
-  nsExec::Exec '"$INSTDIR\blkbstrd.exe" uninstall-service'
+  ; An app update runs the old uninstaller first, with /UPDATE. Removing the service there would
+  ; leave the user with no helper (and no engine exclusion) after every update.
+  ${If} $UpdateMode = 1
+    nsExec::Exec 'sc.exe stop blkbstrd'
+    Sleep 3000
+  ${Else}
+    nsExec::Exec '"$INSTDIR\blkbstrd.exe" uninstall-service'
+  ${EndIf}
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL
-  ReadEnvStr $0 ProgramData
-  RMDir /r "$0\blkbstr"
+  ${If} $UpdateMode <> 1
+    ReadEnvStr $0 ProgramData
+    RMDir /r "$0\blkbstr"
+  ${EndIf}
 !macroend
