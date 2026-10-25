@@ -1,0 +1,26 @@
+# Maintainer: Blockbuster <43419555+dodoflix@users.noreply.github.com>
+# Rendered by scripts/publish-aur.sh: @VERSION@ and @SHA256@ are filled in on each release.
+# The deb carries the GUI only; the privileged helper still comes from packaging/linux/install.sh.
+pkgname=blkbstr-bin
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='A multi-platform GUI for zapret2'
+arch=('x86_64')
+url='https://github.com/dodoflix/blkbstr'
+license=('MIT')
+depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator')
+optdepends=('nftables: firewall rules for the engine'
+            'luajit: Lua runtime for the engine (Lua 5.3+ also works)'
+            'polkit: installing the engine and the helper service')
+provides=('blkbstr')
+conflicts=('blkbstr')
+options=('!strip' '!debug')
+_deb="Blockbuster_${pkgver}_amd64.deb"
+noextract=("$_deb")
+source=("$url/releases/download/v$pkgver/$_deb")
+sha256sums=('@SHA256@')
+
+package() {
+  bsdtar -xf "$_deb" -C "$srcdir"
+  bsdtar -xf "$srcdir"/data.tar.* -C "$pkgdir"
+}
