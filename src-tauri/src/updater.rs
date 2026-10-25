@@ -19,7 +19,7 @@ fn installable() -> bool {
     cfg!(windows) || (cfg!(target_os = "linux") && std::env::var_os("APPIMAGE").is_some())
 }
 
-async fn newer(app: &AppHandle) -> Result<Option<tauri_plugin_updater::Update>, String> {
+pub async fn newer(app: &AppHandle) -> Result<Option<tauri_plugin_updater::Update>, String> {
     app.updater()
         .map_err(|e| e.to_string())?
         .check()
