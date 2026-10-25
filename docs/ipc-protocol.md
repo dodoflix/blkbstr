@@ -18,8 +18,11 @@ daemon sets `0660` immediately after binding and hands it to the group given by
 `--socket-group-gid`. Without that flag it stays root-only and logs a warning, which is a
 GUI that cannot connect rather than a socket anyone can drive.
 
-> Windows named-pipe ACLs are not implemented yet. The pipe must be restricted to the installing
-> user's group before any Windows release - see `bind()` in `crates/blkbstr-daemon/src/main.rs`.
+On Windows the pipe's access list is SYSTEM and the one user who ran `blkbstrd install-service`,
+passed to the service as `--allow-sid`. Not Administrators: the pipe is the authority to run the
+engine, and it belongs to a person. Remote clients are refused, and a service started without
+`--allow-sid` stops instead of serving the pipe's default access. Installing again is how access
+moves to a different account.
 
 ## Versioning
 

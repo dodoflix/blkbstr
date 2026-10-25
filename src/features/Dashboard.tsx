@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import {
   Badge,
   Button,
-  CodeBlock,
   Columns,
   Heading,
   KeyValue,
@@ -22,6 +21,7 @@ import * as api from "../api";
 import { useBackend } from "./backend";
 import { countdown, plural, uptime } from "./format";
 import { usePrefs } from "./prefs";
+import { HelperInstall } from "./HelperInstall";
 import { SiteList } from "./SiteList";
 
 const ROW_PLACEHOLDERS = 6;
@@ -170,9 +170,9 @@ function ServiceDown() {
           The background helper isn't running.
         </Heading>
         <Text as="p" size="lg" color={2}>
-          Blockbuster changes firewall rules through a small service. Install it once, then check again.
+          Blockbuster runs the engine through a small service. Install it once, then check again.
         </Text>
-        <CodeBlock code="packaging/linux/install.sh" title="Run in the project folder" />
+        <HelperInstall />
         <Row gap={3}>
           <Button icon="refresh" onClick={() => void refresh()}>
             Check again

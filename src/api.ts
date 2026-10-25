@@ -81,7 +81,7 @@ export type Environment = {
 export const detectEnvironment = () =>
   invoke<Environment>("detect_environment");
 
-/** Downloads the pinned zapret2 release and installs it after a polkit prompt. Resolves once it is in place. */
+/** Downloads the pinned zapret2 release and installs it after a polkit or UAC prompt. Resolves once it is in place. */
 export const installEngine = () => invoke<void>("install_engine");
 
 export type LegacyImport = {
@@ -164,7 +164,9 @@ export type ServiceStatus = {
 };
 
 export const serviceStatus = () => invoke<ServiceStatus>("service_status");
-/** Both prompt via polkit. */
+/** Registers the background helper on Windows, behind one UAC prompt. Linux installs it with a script. */
+export const serviceInstall = () => invoke<void>("service_install");
+/** Both prompt: polkit on Linux, UAC on Windows (starting and stopping on Windows do not). */
 export const serviceSetEnabled = (enabled: boolean) =>
   invoke<void>("service_set_enabled", { enabled });
 export const serviceSetActive = (active: boolean) =>

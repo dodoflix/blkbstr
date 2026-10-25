@@ -43,8 +43,19 @@ pub fn parameter_file(config: &Config, engine: &EngineOptions) -> String {
     }
     match engine.platform {
         Platform::Linux => lines.push(format!("--qnum={}", engine.queue_num)),
-        // winws2 builds its own WinDivert filter; dvtws2 takes a divert port the daemon owns.
-        Platform::Windows | Platform::Bsd => {}
+        // winws2 builds its own WinDivert filter from these; dvtws2 takes a divert port the daemon owns.
+        // Outgoing only: SYN+ACK, FIN and RST come back without asking, and intercepting every
+        // incoming segment of a download costs CPU that no shipped strategy needs.
+        Platform::Windows => {
+            let (tcp, udp) = intercept_ports(config);
+            if !tcp.is_empty() {
+                lines.push(format!("--wf-tcp-out={tcp}"));
+            }
+            if !udp.is_empty() {
+                lines.push(format!("--wf-udp-out={udp}"));
+            }
+        }
+        Platform::Bsd => {}
     }
     if !engine.pidfile.is_empty() {
         lines.push(format!("--pidfile={}", engine.pidfile));
@@ -71,6 +82,32 @@ pub fn parameter_file(config: &Config, engine: &EngineOptions) -> String {
     let mut out = lines.join("\n");
     out.push('\n');
     out
+}
+
+/// The TCP and UDP ports the enabled strategies match, each merged and sorted. Intercepting more
+/// is pure CPU cost, so this is what both the nftables rules and winws2's WinDivert filter use.
+pub fn intercept_ports(config: &Config) -> (String, String) {
+    let enabled = || config.strategies.iter().filter(|s| s.enabled);
+    (
+        collect_ports(enabled(), |s| s.filter.tcp.as_deref()),
+        collect_ports(enabled(), |s| s.filter.udp.as_deref()),
+    )
+}
+
+fn collect_ports<'a>(
+    strategies: impl Iterator<Item = &'a Strategy>,
+    pick: impl Fn(&'a Strategy) -> Option<&'a str>,
+) -> String {
+    let mut ports: Vec<&str> = strategies
+        .filter_map(pick)
+        .flat_map(|p| p.split(','))
+        .map(str::trim)
+        // `~` negates and `*` means everything; neither is a port nftables can put in a set.
+        .filter(|p| !p.is_empty() && !p.starts_with('~') && *p != "*")
+        .collect();
+    ports.sort_unstable();
+    ports.dedup();
+    ports.join(",")
 }
 
 fn filter_lines(filter: &Filter) -> Vec<String> {
@@ -236,6 +273,65 @@ mod tests {
         config.strategies[0].enabled = false;
         let out = parameter_file(&config, &engine());
         assert!(!out.contains("--name=") && !out.contains("--new="), "{out}");
+    }
+
+    #[test]
+    fn windows_declares_its_ports_instead_of_firewall_rules() {
+        let mut config = starter_config("t");
+        config.strategies[0].filter.udp = Some("443".into());
+        let out = parameter_file(
+            &config,
+            &EngineOptions {
+                platform: Platform::Windows,
+                ..engine()
+            },
+        );
+        assert!(out.contains("--wf-tcp-out=443\n"), "{out}");
+        assert!(out.contains("--wf-udp-out=443\n"), "{out}");
+        // They are global options, so they must precede the first profile.
+        assert!(out.find("--wf-tcp-out").unwrap() < out.find("--name=").unwrap());
+
+        let linux = parameter_file(&config, &engine());
+        assert!(!linux.contains("--wf-"), "{linux}");
+    }
+
+    #[test]
+    fn ports_are_merged_deduplicated_and_sorted() {
+        let mut config = Config::new("t");
+        config.strategies = vec![
+            ports("a", Some("443"), Some("443")),
+            ports("b", Some("80,443"), None),
+        ];
+        assert_eq!(intercept_ports(&config), ("443,80".into(), "443".into()));
+    }
+
+    #[test]
+    fn wildcards_and_negations_are_not_treated_as_ports() {
+        let mut config = Config::new("t");
+        config.strategies = vec![
+            ports("a", Some("*"), None),
+            ports("b", Some("~22,443"), None),
+        ];
+        assert_eq!(intercept_ports(&config).0, "443");
+    }
+
+    #[test]
+    fn disabled_strategies_contribute_no_ports() {
+        let mut config = Config::new("t");
+        let mut off = ports("off", Some("8080"), None);
+        off.enabled = false;
+        config.strategies = vec![off, ports("on", Some("443"), None)];
+        assert_eq!(intercept_ports(&config).0, "443");
+    }
+
+    fn ports(name: &str, tcp: Option<&str>, udp: Option<&str>) -> Strategy {
+        let mut s = Strategy::new(name);
+        s.filter = Filter {
+            tcp: tcp.map(str::to_owned),
+            udp: udp.map(str::to_owned),
+            ..Filter::default()
+        };
+        s
     }
 
     #[test]

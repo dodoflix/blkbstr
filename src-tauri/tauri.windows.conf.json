@@ -1,0 +1,12 @@
+{
+  "bundle": {
+    "targets": ["nsis"],
+    "externalBin": ["binaries/blkbstrd"],
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "installerHooks": "../packaging/windows/hooks.nsh"
+      }
+    }
+  }
+}

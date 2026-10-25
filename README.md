@@ -14,7 +14,7 @@ Start it (needs Rust, Node 22+ and the [Tauri dependencies](https://tauri.app/st
 npm install && npm run tauri dev
 ```
 
-Or download a package from the [releases](https://github.com/dodoflix/blkbstr/releases). Running the engine also needs `nftables`, a Lua runtime and a small root service ([docs/development.md](docs/development.md) covers setting those up); the setup wizard installs zapret2 itself.
+Or download a package from the [releases](https://github.com/dodoflix/blkbstr/releases). Running the engine also needs a small background service, plus `nftables` and a Lua runtime on Linux ([docs/development.md](docs/development.md) covers setting those up); the setup wizard installs zapret2 itself.
 
 It walks you through checking your computer, testing which sites are blocked, trying strategies one by one and saving the one that works. Trial runs undo themselves unless you keep them, configs are portable JSON files, and nothing leaves your machine.
 
@@ -24,4 +24,4 @@ Also: a simple view by default and an advanced one with the real parameter file,
 - [Development](docs/development.md), [config format](docs/config-format.md) and [platform notes](docs/platform-notes.md)
 - [Contributing](CONTRIBUTING.md), [security policy](SECURITY.md) and [releasing](docs/releasing.md)
 
-Linux first; Windows and the BSDs are planned. Use it only where the law and your network's rules allow it. See the [legal notice](LEGAL.md).
+Linux and Windows; the BSDs are planned. Use it only where the law and your network's rules allow it. See the [legal notice](LEGAL.md).

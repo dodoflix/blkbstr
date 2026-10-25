@@ -99,6 +99,13 @@ jobs:
       # tauri embeds the built frontend, so it must exist first.
       - run: npm run build
 
+      # The Windows bundle config lists the daemon as a sidecar, and the build script refuses to
+      # run without it.
+      - name: Stage the daemon sidecar
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: packaging/windows/stage-daemon.ps1
+
       - run: cargo clippy -p blkbstr --all-targets -- -D warnings
       - run: cargo test -p blkbstr
 

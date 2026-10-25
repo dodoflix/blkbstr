@@ -25,6 +25,7 @@ import {
   useToast,
 } from "../ui";
 import * as api from "../api";
+import { useHelperInstall } from "./HelperInstall";
 import { useBackend } from "./backend";
 import { impactLabel, plainImpact, useAutoConfig, type AutoConfig } from "./autoconfig";
 import { plural } from "./format";
@@ -69,9 +70,11 @@ function ComputerStep({ onNext }: { onNext: () => void }) {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string>();
   const [imported, setImported] = useState<api.LegacyImport>();
+  const helper = useHelperInstall();
   if (!env || !daemon) return <Progress indeterminate label="Looking at this computer" />;
 
-  const canInstall = env.platform === "linux";
+  const windows = env.platform === "windows";
+  const canInstall = env.platform === "linux" || windows;
 
   async function install() {
     setInstalling(true);
@@ -105,6 +108,12 @@ function ComputerStep({ onNext }: { onNext: () => void }) {
       state: daemon.reachable ? "ok" : "fail",
       title: "Background helper",
       detail: daemon.reachable ? `Running${advanced ? `, version ${daemon.version}` : ""}` : "Not running. Install it once, then check again.",
+      action:
+        !daemon.reachable && windows ? (
+          <Button size="sm" icon="shield-check" loading={helper.installing} onClick={() => void helper.install()}>
+            Install
+          </Button>
+        ) : undefined,
     }),
     requirement({
       state: env.engine ? "ok" : installing ? "busy" : "fail",
@@ -112,11 +121,13 @@ function ComputerStep({ onNext }: { onNext: () => void }) {
       detail: env.engine
         ? advanced ? `${env.engine.version ?? "found"} at ${env.engine.path}` : "Installed"
         : installing
-          ? "Downloading zapret2, then asking for your password to install it."
+          ? `Downloading zapret2, then asking for ${windows ? "permission" : "your password"} to install it.`
           : !canInstall
             ? "Not installed. Put nfqws2 on your PATH or in /opt/zapret2."
             : daemon.reachable
-              ? "Not installed. Blockbuster downloads the official release and installs it in /opt/zapret2. You will be asked for your password."
+              ? windows
+                ? "Not installed. Blockbuster downloads the official release and installs it in Program Files. Windows will ask for permission."
+                : "Not installed. Blockbuster downloads the official release and installs it in /opt/zapret2. You will be asked for your password."
               : "Not installed. Install the background helper first, then Blockbuster can install this for you.",
       action:
         !env.engine && canInstall ? (
@@ -125,7 +136,8 @@ function ComputerStep({ onNext }: { onNext: () => void }) {
           </Button>
         ) : undefined,
     }),
-    requirement({
+    // winws2 carries its own Lua and brings its own packet driver, so neither is something to check for.
+    ...(windows ? [] : [requirement({
       state: env.lua?.supported ? "ok" : "fail",
       title: "Lua",
       detail: !env.lua ? "Not installed. LuaJIT 2.1+ or Lua 5.3+ is needed." : env.lua.supported ? (advanced ? `${env.lua.version} at ${env.lua.path}` : "Installed") : `${env.lua.version} is too old. LuaJIT 2.1+ or Lua 5.3+ is needed.`,
@@ -134,14 +146,14 @@ function ComputerStep({ onNext }: { onNext: () => void }) {
       state: env.nftables ? "ok" : "fail",
       title: "Firewall tools (nftables)",
       detail: env.nftables ? (advanced ? `${env.nftables.version ?? "found"} at ${env.nftables.path}` : "Installed") : "Not installed. Blockbuster uses nftables to redirect traffic to the engine.",
-    }),
+    })]),
   ];
-  const ready = daemon.reachable && Boolean(env.engine) && Boolean(env.lua?.supported) && Boolean(env.nftables);
+  const ready = daemon.reachable && Boolean(env.engine) && (windows || (Boolean(env.lua?.supported) && Boolean(env.nftables)));
 
   return (
     <Stack gap={5}>
       <RowList label="Requirements" items={rows} />
-      {!daemon.reachable && <CodeBlock code="packaging/linux/install.sh" title="Install the helper" />}
+      {!daemon.reachable && !windows && <CodeBlock code="packaging/linux/install.sh" title="Install the helper" />}
       {installError && (
         <Notice tone="danger" title="The engine did not install">
           {installError}

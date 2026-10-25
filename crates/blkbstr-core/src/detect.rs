@@ -1,10 +1,11 @@
 //! What is already on this machine. Runs unprivileged so onboarding can say what is missing before
 //! any daemon exists; "not found" is a normal answer, so nothing returns a `Result`.
 
+use crate::engine_release;
+use crate::process;
 use crate::registry::Platform;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Tool {
@@ -90,19 +91,18 @@ pub fn locate_engine(binary: &str) -> Option<PathBuf> {
             candidates.push(dir.join(binary));
         }
     }
-    candidates.extend(
-        [
-            "/opt/zapret2",
-            "/usr/local/bin",
-            "/usr/bin",
-            "/usr/local/libexec",
-        ]
-        .iter()
-        .map(|d| Path::new(d).join(binary)),
-    );
+    let binary = format!("{binary}{}", std::env::consts::EXE_SUFFIX);
+    candidates.push(engine_release::install_dir().join(&binary));
+    if cfg!(unix) {
+        candidates.extend(
+            ["/usr/local/bin", "/usr/bin", "/usr/local/libexec"]
+                .iter()
+                .map(|d| Path::new(d).join(&binary)),
+        );
+    }
     // Read PATH directly rather than shelling out to `command -v`, so a root daemon never execs a shell.
     if let Some(path) = std::env::var_os("PATH") {
-        candidates.extend(std::env::split_paths(&path).map(|d| d.join(binary)));
+        candidates.extend(std::env::split_paths(&path).map(|d| d.join(&binary)));
     }
     candidates.into_iter().find(|p| p.is_file())
 }
@@ -120,16 +120,18 @@ pub fn locate_lua_dir() -> Option<PathBuf> {
             candidates.push(dir.join("../lua"));
         }
     }
-    candidates.extend(
-        [
-            "/opt/zapret2/lua",
-            "/usr/share/zapret2/lua",
-            "/usr/local/share/zapret2/lua",
-            "/usr/lib/zapret2/lua",
-        ]
-        .iter()
-        .map(PathBuf::from),
-    );
+    candidates.push(engine_release::install_dir().join("lua"));
+    if cfg!(unix) {
+        candidates.extend(
+            [
+                "/usr/share/zapret2/lua",
+                "/usr/local/share/zapret2/lua",
+                "/usr/lib/zapret2/lua",
+            ]
+            .iter()
+            .map(PathBuf::from),
+        );
+    }
     candidates
         .into_iter()
         .find(|d| d.join(LUA_SCRIPTS[0]).is_file())
@@ -141,13 +143,17 @@ pub fn lua_init_scripts(dir: &Path) -> Vec<String> {
         .iter()
         .map(|name| dir.join(name))
         .filter(|p| p.is_file())
-        .map(|p| p.display().to_string())
+        .map(|p| crate::paths::for_engine(&p))
         .collect()
 }
 
 /// The best Lua on the machine. A supported runtime wins over a newer-looking one, so a box with
 /// `lua` 5.1 and `lua5.4` is not told to install something it has.
 fn lua_runtime() -> Option<LuaRuntime> {
+    // winws2 is built with LuaJIT linked in, so there is nothing on the machine to look for.
+    if cfg!(windows) {
+        return None;
+    }
     let found: Vec<LuaRuntime> = ["luajit", "lua", "lua5.4", "lua5.3"]
         .iter()
         .filter_map(|name| {
@@ -253,7 +259,7 @@ fn which(binary: &str) -> Option<PathBuf> {
 }
 
 fn version_of(path: &Path, arg: &str) -> Option<String> {
-    let out = Command::new(path).arg(arg).output().ok()?;
+    let out = process::command(path).arg(arg).output().ok()?;
     // LuaJIT prints its banner on stderr; most everything else uses stdout.
     let first = |bytes: &[u8]| {
         String::from_utf8_lossy(bytes)

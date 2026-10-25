@@ -6,14 +6,16 @@
 use crate::firewall::{self, Firewall, InterceptSpec};
 use crate::supervisor::{Decision, Supervisor};
 use anyhow::{bail, Context, Result};
-use blkbstr_core::config::{Config, Strategy};
+use blkbstr_core::config::Config;
 use blkbstr_core::detect;
+use blkbstr_core::engine_release;
 use blkbstr_core::paths;
+use blkbstr_core::process;
 use blkbstr_core::protocol::EngineStatus;
 use blkbstr_core::registry::Platform;
 use blkbstr_core::render::{self, EngineOptions};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// What is running, and what to bring back if it dies.
@@ -54,7 +56,10 @@ impl Engine {
         let version = read_version(&binary);
         tracing::info!(binary = %binary.display(), version = ?version, "found engine");
         // Rules from a run that was killed rather than stopped outlive the process that made them.
-        Firewall::clear_stale();
+        // Windows has none: winws2 owns its WinDivert filter and loses it when it dies.
+        if platform == Platform::Linux {
+            Firewall::clear_stale();
+        }
         Ok(Self {
             platform,
             binary,
@@ -207,18 +212,18 @@ impl Engine {
         std::fs::create_dir_all(&runtime)
             .with_context(|| format!("creating {}", runtime.display()))?;
 
-        let params_path = runtime.join("nfqws2.conf").display().to_string();
+        let params_path = paths::for_engine(&runtime.join("nfqws2.conf"));
         let mut options = EngineOptions {
             platform: self.platform,
             queue_num: 200,
-            pidfile: runtime.join("engine.pid").display().to_string(),
-            debug_log: Some(format!("{}/engine.log", paths::log_dir().display())),
+            pidfile: paths::for_engine(&runtime.join("engine.pid")),
+            debug_log: Some(paths::for_engine(&paths::log_dir().join("engine.log"))),
             lua_init: lua_init()?,
             validate: false,
         };
 
         options.validate = true;
-        let check_path = runtime.join("nfqws2-check.conf").display().to_string();
+        let check_path = paths::for_engine(&runtime.join("nfqws2-check.conf"));
         std::fs::write(&check_path, render::parameter_file(config, &options))
             .with_context(|| format!("writing {check_path}"))?;
         self.validate(&check_path)?;
@@ -228,16 +233,26 @@ impl Engine {
             .with_context(|| format!("writing {params_path}"))?;
 
         // Rules last, so a config the engine rejects never reaches the network stack.
-        let spec = intercept_spec(config, options.queue_num)?;
-        self.firewall.apply(&spec)?;
+        let (tcp_ports, udp_ports) = selected_ports(config)?;
+        if self.platform == Platform::Linux {
+            let mut spec = InterceptSpec::new(firewall::default_route_iface()?, options.queue_num);
+            spec.tcp_ports = tcp_ports;
+            spec.udp_ports = udp_ports;
+            self.firewall.apply(&spec)?;
+        }
 
-        let child = Command::new(&self.binary)
+        let child = process::command(&self.binary)
             .args(render::run_args(&params_path))
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
             .with_context(|| format!("starting {}", self.binary.display()))?;
+
+        // Without this a killed daemon leaves winws2 running, and the next start is refused as a
+        // duplicate instance of the same WinDivert filter.
+        #[cfg(windows)]
+        crate::job::adopt(&child);
 
         let pid = child.id();
         self.child = Some(child);
@@ -269,7 +284,7 @@ impl Engine {
     /// Runs the config with `--intercept=0`: options are checked, Lua loaded and actions resolved,
     /// then the engine exits. `--dry-run` is weaker: it returns 0 for an action no Lua defines.
     fn validate(&self, params_path: &str) -> Result<()> {
-        let out = Command::new(&self.binary)
+        let out = process::command(&self.binary)
             .args(render::run_args(params_path))
             .output()
             .with_context(|| format!("checking the config with {}", self.binary.display()))?;
@@ -304,9 +319,7 @@ impl Engine {
     /// Kills the engine and removes the rules on the way out of the process. Unlike [`stop`] it
     /// keeps the saved config (the machine is going down, not stopping by choice) and never fails.
     /// Without it the engine outlives a killed daemon, keeps NFQUEUE bound, and every later start
-    /// dies with `nfq_create_queue(): Operation not permitted`. Unix only; Windows needs a console
-    /// control handler wired to the same method before it ships.
-    #[cfg(unix)]
+    /// dies with `nfq_create_queue(): Operation not permitted`.
     pub fn shutdown(&mut self) {
         let _ = self.firewall.teardown();
         if let Some(mut child) = self.child.take() {
@@ -337,7 +350,7 @@ fn kill_orphan() {
         let args: Vec<_> = cmdline.split(|b| *b == 0).collect();
         if args.contains(&params.as_bytes()) {
             tracing::warn!(pid, "killing an engine left behind by a previous daemon");
-            let _ = Command::new("kill")
+            let _ = std::process::Command::new("kill")
                 .arg("-TERM")
                 .arg(pid.to_string())
                 .status();
@@ -387,38 +400,22 @@ fn parse_saved(text: &str) -> Result<Config, String> {
 }
 
 /// Intercept only the ports the strategies match; more is pure CPU cost.
-fn intercept_spec(config: &Config, queue_num: u16) -> Result<InterceptSpec> {
-    let enabled = || config.strategies.iter().filter(|s| s.enabled);
-    let mut spec = InterceptSpec::new(firewall::default_route_iface()?, queue_num);
-    spec.tcp_ports = collect_ports(enabled(), |s| s.filter.tcp.as_deref());
-    spec.udp_ports = collect_ports(enabled(), |s| s.filter.udp.as_deref());
-    if spec.tcp_ports.is_empty() && spec.udp_ports.is_empty() {
+fn selected_ports(config: &Config) -> Result<(String, String)> {
+    let ports = render::intercept_ports(config);
+    if ports.0.is_empty() && ports.1.is_empty() {
         bail!("no enabled strategy selects any TCP or UDP port, so nothing would be intercepted");
     }
-    Ok(spec)
-}
-
-fn collect_ports<'a>(
-    strategies: impl Iterator<Item = &'a Strategy>,
-    pick: impl Fn(&'a Strategy) -> Option<&'a str>,
-) -> String {
-    let mut ports: Vec<&str> = strategies
-        .filter_map(pick)
-        .flat_map(|p| p.split(','))
-        .map(str::trim)
-        // `~` negates and `*` means everything; neither is a port nftables can put in a set.
-        .filter(|p| !p.is_empty() && !p.starts_with('~') && *p != "*")
-        .collect();
-    ports.sort_unstable();
-    ports.dedup();
-    ports.join(",")
+    Ok(ports)
 }
 
 fn lua_init() -> Result<Vec<String>> {
-    let dir = detect::locate_lua_dir().context(
-        "zapret2's Lua scripts were not found. They ship with the engine - look for \
-         zapret-lib.lua under /opt/zapret2/lua - and without them no desync action exists",
-    )?;
+    let dir = detect::locate_lua_dir().with_context(|| {
+        format!(
+            "zapret2's Lua scripts were not found. They ship with the engine - look for \
+         zapret-lib.lua under {} - and without them no desync action exists",
+            engine_release::install_dir().join("lua").display()
+        )
+    })?;
     Ok(detect::lua_init_scripts(&dir))
 }
 
@@ -426,13 +423,14 @@ fn locate(binary: &str) -> Result<PathBuf> {
     detect::locate_engine(binary).with_context(|| {
         format!(
             "{binary} not found. Install zapret2 (https://github.com/bol-van/zapret2) or place \
-             the binary in /opt/zapret2"
+             the binary in {}",
+            engine_release::install_dir().display()
         )
     })
 }
 
 fn read_version(binary: &Path) -> Option<String> {
-    let out = Command::new(binary).arg("--version").output().ok()?;
+    let out = process::command(binary).arg("--version").output().ok()?;
     String::from_utf8_lossy(&out.stdout)
         .lines()
         .next()
@@ -450,7 +448,7 @@ fn now() -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use blkbstr_core::config::Filter;
+    use blkbstr_core::config::{Filter, Strategy};
 
     fn strategy(name: &str, tcp: Option<&str>, udp: Option<&str>) -> Strategy {
         let mut s = Strategy::new(name);
@@ -463,50 +461,10 @@ mod tests {
     }
 
     #[test]
-    fn ports_are_merged_deduplicated_and_sorted() {
-        let mut cfg = Config::new("t");
-        cfg.strategies = vec![
-            strategy("a", Some("443"), Some("443")),
-            strategy("b", Some("80,443"), None),
-        ];
-        assert_eq!(
-            collect_ports(cfg.strategies.iter(), |s| s.filter.tcp.as_deref()),
-            "443,80"
-        );
-        assert_eq!(
-            collect_ports(cfg.strategies.iter(), |s| s.filter.udp.as_deref()),
-            "443"
-        );
-    }
-
-    #[test]
-    fn wildcards_and_negations_are_not_treated_as_ports() {
-        let cfg = [
-            strategy("a", Some("*"), None),
-            strategy("b", Some("~22,443"), None),
-        ];
-        assert_eq!(
-            collect_ports(cfg.iter(), |s| s.filter.tcp.as_deref()),
-            "443"
-        );
-    }
-
-    #[test]
-    fn disabled_strategies_contribute_no_ports() {
-        let mut cfg = Config::new("t");
-        let mut off = strategy("off", Some("8080"), None);
-        off.enabled = false;
-        cfg.strategies = vec![off, strategy("on", Some("443"), None)];
-        let enabled = cfg.strategies.iter().filter(|s| s.enabled);
-        assert_eq!(collect_ports(enabled, |s| s.filter.tcp.as_deref()), "443");
-    }
-
-    #[test]
     fn a_config_that_selects_nothing_is_refused() {
         let mut cfg = Config::new("t");
         cfg.strategies = vec![strategy("a", None, None)];
-        // Refused either on the port check or on there being no default route in CI.
-        assert!(intercept_spec(&cfg, 200).is_err());
+        assert!(selected_ports(&cfg).is_err());
     }
 
     #[test]

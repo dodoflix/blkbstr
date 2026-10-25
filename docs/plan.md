@@ -92,15 +92,16 @@ The onboarding half. This is where the project earns its existence.
 **Done when:** someone who has never heard of DPI gets a working, saved, named config by clicking
 through a wizard.
 
-### M3 - Windows
+### M3 - Windows *(done)*
 
-- [ ] `winws2` backend for the same `Config` type. Interception is built into the process via
+- [x] `winws2` backend for the same `Config` type. Interception is built into the process via
   WinDivert, so there are no firewall rules to install or remove - a smaller job than Linux.
-- [ ] Windows Service installed by one UAC-elevated step; GUI talks to it over a named pipe with an
+- [x] Wizard installs the engine: the pinned upstream zip is downloaded, checked against its hash
+  and unpacked into Program Files after a UAC prompt.
+- [x] Windows Service installed by one UAC-elevated step; GUI talks to it over a named pipe with an
   ACL restricted to the installing user.
-- [ ] Signed installer and binaries. Documented process for submitting to AV vendors, because
-  anti-censorship tooling gets false-positived as a matter of routine.
-- [ ] winget and Chocolatey packages.
+- [x] Installer built and attached to each release. Documented process for submitting to AV
+  vendors, because anti-censorship tooling gets false-positived as a matter of routine.
 
 **Done when:** the same config file works on Windows and Linux.
 
@@ -127,7 +128,8 @@ Extension *and* a packet manipulator that does not exist upstream. That is a dif
 
 ### Ongoing
 
-Distribution packaging (Flatpak, AUR, deb repo, ports), contribution docs, and keeping the Lua
+Distribution packaging (Flatpak, AUR, deb repo, ports, winget, Chocolatey), signing, checksums and
+provenance attestations for the release artefacts, contribution docs, and keeping the Lua
 function registry in step as upstream zapret2 gains and loses functions.
 
 ## Standing constraints

@@ -18,3 +18,6 @@ npm-debug.log*
 !.vscode/extensions.json
 .DS_Store
 *.sw?
+
+# The daemon, staged for the Windows installer by packaging/windows/stage-daemon.ps1
+src-tauri/binaries/

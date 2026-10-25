@@ -18,6 +18,7 @@ import {
 } from "../ui";
 import * as api from "../api";
 import { useBackend } from "./backend";
+import { HelperInstall } from "./HelperInstall";
 import { SiteList } from "./SiteList";
 import { usePrefs } from "./prefs";
 
@@ -50,15 +51,15 @@ export function SystemPage() {
               items={[
                 { label: "System", value: env ? `${env.distro?.pretty_name ?? env.platform ?? "unsupported"}${env.distro?.package_manager ? `, ${env.distro.package_manager}` : ""}` : <Skeleton width={140} /> },
                 { label: "zapret2 engine", value: env ? found(Boolean(env.engine), env.engine ? (env.engine.version ?? "found") : "not installed") : <Skeleton width={110} />, hint: advanced ? env?.engine?.path : undefined },
-                { label: "Lua", value: env ? found(Boolean(env.lua?.supported), env.lua ? (env.lua.version ?? "found") : "not installed") : <Skeleton width={110} />, hint: advanced ? env?.lua?.path : undefined },
-                { label: "nftables", value: env ? found(Boolean(env.nftables), env.nftables ? (env.nftables.version ?? "found") : "not installed") : <Skeleton width={110} />, hint: advanced ? env?.nftables?.path : undefined },
+                { label: "Lua", hidden: env?.platform === "windows", value: env ? found(Boolean(env.lua?.supported), env.lua ? (env.lua.version ?? "found") : "not installed") : <Skeleton width={110} />, hint: advanced ? env?.lua?.path : undefined },
+                { label: "nftables", hidden: env?.platform === "windows", value: env ? found(Boolean(env.nftables), env.nftables ? (env.nftables.version ?? "found") : "not installed") : <Skeleton width={110} />, hint: advanced ? env?.nftables?.path : undefined },
                 { label: "Existing install", value: env?.existing_install, hidden: !env?.existing_install },
               ]}
             />
           </Sheet>
         </Section>
 
-        <Section title="Background helper" description="Runs the engine and owns the firewall rules.">
+        <Section title="Background helper" description={env?.platform === "windows" ? "Runs the engine in the background." : "Runs the engine and owns the firewall rules."}>
           <Sheet>
             {!service ? (
               <Skeleton width="60%" height={64} />
@@ -75,7 +76,7 @@ export function SystemPage() {
                     tone="neutral"
                     icon={service.active ? "stop" : "play"}
                     onClick={async () => {
-                      if (service.active && !(await confirm({ title: "Stop the helper?", description: "Blockbuster stops working until it is started again. You will be asked to authenticate.", confirmLabel: "Stop it", tone: "danger" }))) return;
+                      if (service.active && !(await confirm({ title: "Stop the helper?", description: env?.platform === "windows" ? "Blockbuster stops working until it is started again." : "Blockbuster stops working until it is started again. You will be asked to authenticate.", confirmLabel: "Stop it", tone: "danger" }))) return;
                       void act(() => api.serviceSetActive(!service.active));
                     }}
                   >
@@ -90,7 +91,10 @@ export function SystemPage() {
                 />
               </Stack>
             ) : (
-              <Text color={2}>{service.unsupported ?? "The helper is not installed. Run packaging/linux/install.sh once."}</Text>
+              <Stack gap={3}>
+                <Text color={2}>{service.unsupported ?? "The helper is not installed."}</Text>
+                {!service.unsupported && <HelperInstall />}
+              </Stack>
             )}
           </Sheet>
         </Section>

@@ -5,7 +5,16 @@ mod engine;
 mod firewall;
 #[cfg(unix)]
 mod install;
+#[cfg(windows)]
+#[path = "install_windows.rs"]
+mod install;
+#[cfg(windows)]
+mod job;
 mod supervisor;
+#[cfg(any(windows, test))]
+mod winservice;
+#[cfg(any(windows, test))]
+mod zip_install;
 
 use anyhow::{Context, Result};
 use blkbstr_core::paths;
@@ -25,15 +34,34 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// How often the monitor checks on the engine.
 const MONITOR_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
 
+type EngineSlot = Mutex<Result<Engine, String>>;
+
 fn main() -> Result<()> {
     let mut argv = std::env::args().skip(1);
-    if argv.next().as_deref() == Some("install-engine") {
-        return install_engine(argv.next());
+    match argv.next().as_deref() {
+        Some("install-engine") => return install_engine(argv.next()),
+        #[cfg(windows)]
+        Some("install-service") => return winservice::install(&Args::parse(argv)),
+        #[cfg(windows)]
+        Some("uninstall-service") => return winservice::uninstall(),
+        #[cfg(windows)]
+        Some("service") => return winservice::run_as_service(Args::parse(argv)),
+        _ => {}
     }
     let args = Args::parse(std::env::args().skip(1));
     let _log_guard = init_logging();
+    // Unix handles SIGTERM; on Windows a foreground run is for development, and the engine dies
+    // with the daemon either way (see `job`).
+    #[cfg(unix)]
+    return run(&args, spawn_shutdown);
+    #[cfg(not(unix))]
+    run(&args, |_| Ok(()))
+}
 
-    let listener = bind(&args)?;
+/// Binds the socket, brings the engine back and serves requests until the process ends. `ready`
+/// gets the engine once the socket is up, which is where each platform hooks its stop signal.
+fn run(args: &Args, ready: impl FnOnce(Arc<EngineSlot>) -> Result<()>) -> Result<()> {
+    let listener = bind(args)?;
     tracing::info!(version = VERSION, socket = %paths::socket_name(), "blkbstrd listening");
 
     // One engine, one lock: requests that touch the network stack serialise through it.
@@ -43,8 +71,7 @@ fn main() -> Result<()> {
         engine.restore();
     }
     spawn_monitor(Arc::clone(&engine));
-    #[cfg(unix)]
-    spawn_shutdown(Arc::clone(&engine))?;
+    ready(Arc::clone(&engine))?;
 
     for conn in listener.incoming() {
         match conn {
@@ -65,10 +92,10 @@ fn main() -> Result<()> {
 
 /// Not the service: a one-shot the GUI runs through `pkexec`, so it has no socket and no engine.
 fn install_engine(tarball: Option<String>) -> Result<()> {
-    let tarball = tarball.context("usage: blkbstrd install-engine <tarball>")?;
-    #[cfg(unix)]
+    let tarball = tarball.context("usage: blkbstrd install-engine <archive>")?;
+    #[cfg(any(unix, windows))]
     return install::run(std::path::Path::new(&tarball));
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     anyhow::bail!("installing the engine is not supported on this platform yet ({tarball})")
 }
 
@@ -76,7 +103,7 @@ fn install_engine(tarball: Option<String>) -> Result<()> {
 /// process group, so a daemon killed without this leaves NFQUEUE bound and every later start dies
 /// with `nfq_create_queue(): Operation not permitted`.
 #[cfg(unix)]
-fn spawn_shutdown(engine: Arc<Mutex<Result<Engine, String>>>) -> Result<()> {
+fn spawn_shutdown(engine: Arc<EngineSlot>) -> Result<()> {
     use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
     use signal_hook::iterator::Signals;
 
@@ -96,7 +123,7 @@ fn spawn_shutdown(engine: Arc<Mutex<Result<Engine, String>>>) -> Result<()> {
 }
 
 /// Restarts an engine that exited by itself. Runs on a timer so the lock is held only briefly.
-fn spawn_monitor(engine: Arc<Mutex<Result<Engine, String>>>) {
+fn spawn_monitor(engine: Arc<EngineSlot>) {
     std::thread::spawn(move || loop {
         std::thread::sleep(MONITOR_INTERVAL);
         if let Ok(engine) = engine.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
@@ -120,12 +147,15 @@ fn open_engine() -> Result<Engine, String> {
 struct Args {
     /// Group id to hand the socket to; without it the socket is root-only and the GUI cannot connect.
     socket_group_gid: Option<u32>,
+    /// Windows: SID of the one user who may open the pipe, besides SYSTEM.
+    allow_sid: Option<String>,
 }
 
 impl Args {
     fn parse(args: impl Iterator<Item = String>) -> Self {
         let mut out = Args {
             socket_group_gid: None,
+            allow_sid: None,
         };
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
@@ -133,6 +163,7 @@ impl Args {
                 "--socket-group-gid" => {
                     out.socket_group_gid = args.next().and_then(|v| v.parse().ok());
                 }
+                "--allow-sid" => out.allow_sid = args.next(),
                 "--version" => {
                     println!("blkbstrd {VERSION}");
                     std::process::exit(0);
@@ -180,10 +211,13 @@ fn init_logging() -> Option<tracing_appender::non_blocking::WorkerGuard> {
 
 fn bind(args: &Args) -> Result<interprocess::local_socket::Listener> {
     let name = paths::socket_name();
+    #[cfg(not(any(unix, windows)))]
+    let _ = args;
     let listener = if paths::socket_is_namespaced() {
-        ListenerOptions::new()
-            .name(name.clone().to_ns_name::<GenericNamespaced>()?)
-            .create_sync()
+        let options = ListenerOptions::new().name(name.clone().to_ns_name::<GenericNamespaced>()?);
+        #[cfg(windows)]
+        let options = winservice::restrict_pipe(options, args.allow_sid.as_deref())?;
+        options.create_sync()
     } else {
         if let Some(parent) = std::path::Path::new(&name).parent() {
             std::fs::create_dir_all(parent)
@@ -204,10 +238,6 @@ fn bind(args: &Args) -> Result<interprocess::local_socket::Listener> {
 
     #[cfg(unix)]
     set_socket_access(&name, args.socket_group_gid)?;
-    #[cfg(not(unix))]
-    // Windows pipe ACLs are not implemented: the pipe is default-permissive and must be restricted
-    // to the installing user's group before any Windows release.
-    let _ = args;
 
     Ok(listener)
 }
@@ -232,7 +262,7 @@ fn set_socket_access(path: &str, gid: Option<u32>) -> Result<()> {
     Ok(())
 }
 
-fn serve(conn: Stream, engine: &Mutex<Result<Engine, String>>) -> Result<()> {
+fn serve(conn: Stream, engine: &EngineSlot) -> Result<()> {
     let mut reader = BufReader::new(&conn);
     let mut writer = &conn;
     while let Some(request) = read_message::<Request>(&mut reader)? {
@@ -242,7 +272,7 @@ fn serve(conn: Stream, engine: &Mutex<Result<Engine, String>>) -> Result<()> {
     Ok(())
 }
 
-fn handle(request: Request, engine: &Mutex<Result<Engine, String>>) -> Response {
+fn handle(request: Request, engine: &EngineSlot) -> Response {
     // A panic in one connection must not poison the engine for every later one.
     let mut guard = engine.lock().unwrap_or_else(|e| e.into_inner());
 
@@ -343,7 +373,7 @@ mod tests {
 
     /// Covers the paths that must answer sensibly on a machine without zapret2, which is every
     /// machine before onboarding.
-    fn no_engine() -> Mutex<Result<Engine, String>> {
+    fn no_engine() -> EngineSlot {
         Mutex::new(Err("nfqws2 not found".into()))
     }
 
