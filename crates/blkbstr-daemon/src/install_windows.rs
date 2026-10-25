@@ -10,7 +10,12 @@ use std::path::Path;
 pub fn run(archive: &Path) -> Result<()> {
     // Read once and hash what was read: the file sits in a user-writable directory, so hashing
     // it and then reopening it would let a swap in between through.
-    let bytes = std::fs::read(archive).with_context(|| format!("reading {}", archive.display()))?;
+    // The archive carries the flagged WinDivert driver, so Defender refuses the read (os error 225)
+    // unless the file is excluded first.
+    crate::defender::exclude(archive);
+    let read = std::fs::read(archive).with_context(|| format!("reading {}", archive.display()));
+    crate::defender::forget(archive);
+    let bytes = read?;
     let dir = engine_release::binary_dir().context("upstream ships no engine for this CPU")?;
     let dest = engine_release::install_dir();
     crate::defender::exclude(&dest);
