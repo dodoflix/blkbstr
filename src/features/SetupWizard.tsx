@@ -134,7 +134,7 @@ function ComputerStep({ onNext }: { onNext: () => void }) {
             ? "Not installed. Put nfqws2 on your PATH or in /opt/zapret2."
             : daemon.reachable
               ? windows
-                ? "Not installed. Blockbuster downloads the official release and installs it in Program Files. Windows will ask for permission."
+                ? "Not installed. Blockbuster downloads the official release and installs it in Program Files. Windows Security flags the engine\u2019s network driver, so Blockbuster also excludes that one folder from its scans. Windows will ask for permission."
                 : "Not installed. Blockbuster downloads the official release and installs it in /opt/zapret2. You will be asked for your password."
               : "Not installed. Install the background helper first, then Blockbuster can install this for you.",
       action:

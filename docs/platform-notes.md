@@ -91,6 +91,12 @@ The named pipe admits SYSTEM and that one user, and refuses remote clients. Chan
 remove it on uninstall and delete `C:\ProgramData\blkbstr`. The engine in Program Files stays: it
 was installed by the wizard, not by the installer.
 
+**Antivirus.** Windows Security flags the WinDivert driver that ships with the engine and removes it
+as it is written. The engine install therefore excludes `C:\Program Files\zapret2` from Defender's
+scans first (`Add-MpPreference`), and uninstalling Blockbuster removes that exclusion when the
+engine there is one the wizard installed. With another antivirus, or Tamper Protection on, the
+exclusion cannot be set and the install says the file was blocked.
+
 **Windows on ARM.** Not offered. Upstream's answer is the x64 build with a test-signed driver and
 Test Signing mode switched on, which is not something to do behind a button.
 

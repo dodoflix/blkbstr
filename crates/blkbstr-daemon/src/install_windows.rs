@@ -13,6 +13,7 @@ pub fn run(archive: &Path) -> Result<()> {
     let bytes = std::fs::read(archive).with_context(|| format!("reading {}", archive.display()))?;
     let dir = engine_release::binary_dir().context("upstream ships no engine for this CPU")?;
     let dest = engine_release::install_dir();
+    crate::defender::exclude(&dest);
     zip_install::unpack(
         &bytes,
         engine_release::sha256(),
