@@ -12,6 +12,9 @@ permissions:
 
 jobs:
   analyze:
+    # The Rust scan takes minutes and is not a required check, so pull requests get the quick
+    # JavaScript one and Rust is scanned on main and weekly.
+    if: matrix.language != 'rust' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
