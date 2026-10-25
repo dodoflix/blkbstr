@@ -1,0 +1,139 @@
+/* Design tokens. Every colour, size, radius, shadow and duration used by src/ui comes from here;
+   components never hard-code a value. ThemeProvider sets data-theme (always resolved to light or
+   dark) and data-motion on <html>. */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces: flat layers separated by a 1px line, not by shadow. */
+  --paper-0: #ffffff;
+  --paper-1: #f5f5f6;
+  --paper-2: #ececee;
+  --paper-3: #dcdce0;
+  --scrim: rgba(10, 10, 12, 0.4);
+
+  /* Ink */
+  --ink-1: #0c0c0e;
+  --ink-2: #4a4a52;
+  --ink-3: #66666f;
+  --ink-inverse: #ffffff;
+  --line: #e4e4e7;
+  --line-strong: #cfcfd4;
+
+  /* Accent: near-black on light, white on dark. Not a colour, on purpose. */
+  --accent: #111114;
+  --accent-hover: #2c2c32;
+  --accent-soft: #ececee;
+  --accent-line: #c7c7ce;
+  --on-accent: #ffffff;
+
+  /* Meaning. Always paired with a mark shape; hue never carries state alone. */
+  --ok: #0e7a52;
+  --ok-soft: #e3f4ec;
+  --warn: #8a5200;
+  --warn-soft: #fbf0db;
+  --danger: #c7312b;
+  --danger-soft: #fce9e8;
+  --on-solid: #ffffff;
+
+  --focus: var(--accent);
+  --veil: rgba(12, 12, 14, 0.05);
+  --veil-strong: rgba(12, 12, 14, 0.1);
+
+  /* Depth: only things that float get a shadow. */
+  --sh-pop: 0 6px 20px -4px rgba(10, 10, 12, 0.16), 0 1px 3px rgba(10, 10, 12, 0.08);
+
+  /* Type */
+  --font-ui: "Hanken Grotesk Variable", "Hanken Grotesk", system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo,
+    Consolas, monospace;
+  --t-xs: 0.75rem;
+  --t-sm: 0.8125rem;
+  --t-md: 0.875rem;
+  --t-lg: 1rem;
+  --t-xl: 1.25rem;
+  --t-2xl: 1.625rem;
+  --t-3xl: 2.25rem;
+  --lh-tight: 1.15;
+  --lh-body: 1.5;
+
+  /* Space: 4px base */
+  --s-0: 0;
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.25rem;
+  --s-6: 1.5rem;
+  --s-7: 2.25rem;
+  --s-8: 3rem;
+
+  /* Shape: one language, squarish. Nothing is a circle or a pill. */
+  --r-1: 3px;
+  --r-2: 5px;
+  --r-3: 6px;
+  --r-4: 8px;
+  --hit: 2.25rem;
+  --hit-sm: 1.75rem;
+  --hit-lg: 2.75rem;
+  --row: 2.875rem;
+
+  /* Motion: short, one curve. */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-1: 100ms;
+  --dur-2: 160ms;
+  --dur-3: 240ms;
+
+  --z-nav: 10;
+  --z-overlay: 100;
+  --z-pop: 200;
+  --z-toast: 300;
+}
+
+/* Dark is neutral black, not tinted. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper-0: #141416;
+  --paper-1: #0b0b0c;
+  --paper-2: #1c1c1f;
+  --paper-3: #2b2b30;
+  --scrim: rgba(0, 0, 0, 0.62);
+  --ink-1: #f2f2f3;
+  --ink-2: #a9a9b2;
+  --ink-3: #8a8a93;
+  --ink-inverse: #0b0b0c;
+  --line: #26262a;
+  --line-strong: #3a3a40;
+  --accent: #f4f4f5;
+  --accent-hover: #ffffff;
+  --accent-soft: rgba(255, 255, 255, 0.1);
+  --accent-line: rgba(255, 255, 255, 0.35);
+  --on-accent: #0b0b0c;
+  --ok: #4fd1a1;
+  --ok-soft: rgba(79, 209, 161, 0.13);
+  --warn: #f0b04a;
+  --warn-soft: rgba(240, 176, 74, 0.14);
+  --danger: #ff7f77;
+  --danger-soft: rgba(255, 127, 119, 0.14);
+  --on-solid: #0b0b0c;
+  --veil: rgba(255, 255, 255, 0.06);
+  --veil-strong: rgba(255, 255, 255, 0.12);
+  --sh-pop: 0 8px 28px -4px rgba(0, 0, 0, 0.7), 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+/* Before React has set data-theme, follow the OS so the first paint is not a flash. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    background: #0b0b0c;
+    color-scheme: dark;
+  }
+}

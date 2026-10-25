@@ -1,0 +1,16 @@
+#!/bin/sh
+# Clippy and the Rust tests when Rust changed, a frontend build when the frontend did. CI still runs
+# everything. Skip once with `git push --no-verify`.
+base=$(git merge-base origin/main HEAD 2>/dev/null) || base=
+if [ -n "$base" ]; then
+    changed=$(git diff --name-only --diff-filter=ACMR "$base" HEAD)
+else
+    changed=$(git ls-files)
+fi
+if echo "$changed" | grep -qE '\.rs$|Cargo\.(toml|lock)$'; then
+    cargo clippy -p blkbstr-core -p blkbstr-daemon --all-targets -- -D warnings || exit 1
+    cargo test -p blkbstr-core -p blkbstr-daemon || exit 1
+fi
+if echo "$changed" | grep -qE '^(src/|index\.html|package(-lock)?\.json|vite\.config|tsconfig)'; then
+    npm run build || exit 1
+fi

@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "Blockbuster",
+        "decorations": false,
         "width": 980,
         "height": 700,
         "minWidth": 720,

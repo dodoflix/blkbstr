@@ -1,0 +1,302 @@
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  height: var(--hit-sm);
+  padding: 0 0.6875rem;
+  border: 0;
+  border-radius: var(--r-2);
+  background: transparent;
+  color: var(--ink-1);
+}
+
+.app-brand:hover {
+  background: var(--veil);
+}
+
+.app-brand__word {
+  font-weight: 700;
+  font-size: var(--t-md);
+  letter-spacing: -0.01em;
+}
+
+.titlebar-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: var(--hit-sm);
+  margin-right: var(--s-2);
+  padding: 0 0.5rem 0 0.625rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--paper-0);
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+}
+
+.titlebar-search:hover {
+  border-color: var(--line-strong);
+  color: var(--ink-2);
+}
+
+@media (max-width: 860px) {
+  .titlebar-search span {
+    display: none;
+  }
+}
+
+/* Fixed footprints: Home, the setup wizard and the site list reserve their height so a late answer
+   from the daemon fills space instead of pushing the page. */
+.home-sheet {
+  min-height: 11.5rem;
+}
+
+.home-state {
+  line-height: 1.12;
+}
+
+.home-state__word {
+  color: var(--ink-3);
+}
+
+.home-state__word[data-on] {
+  color: var(--ok);
+}
+
+.home-sub {
+  max-width: 44rem;
+}
+
+.site-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  height: var(--row);
+  padding: 0 0.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.site-skeleton:first-child {
+  border-top: 0;
+}
+
+/* The wizard fills the window: rail and heading stay put, only the step body scrolls, and the
+   actions are pinned to the bottom of it. */
+.wizard {
+  display: grid;
+  grid-template-columns: 14rem minmax(0, 1fr);
+  height: max(30rem, calc(100vh - 2.5rem - 2 * var(--s-6)));
+  overflow: hidden;
+}
+
+.wizard__rail {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--s-5);
+  padding: calc(var(--s-6) - 0.5rem) var(--s-5) var(--s-6);
+  background: var(--paper-1);
+  border-right: 1px solid var(--line);
+  overflow: auto;
+}
+
+.wizard__rail .ui-btn {
+  align-self: flex-start;
+}
+
+.wizard__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.wizard__head {
+  flex: none;
+  padding: var(--s-6) var(--s-6) 0;
+}
+
+.wizard__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--s-5) var(--s-6) var(--s-6);
+  animation: ui-page-in var(--dur-2) var(--ease-out);
+}
+
+.wizard__body > * {
+  flex: 1;
+}
+
+.wizard__name {
+  max-width: 24rem;
+}
+
+.wizard__actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: auto calc(-1 * var(--s-6)) calc(-1 * var(--s-6));
+  padding: var(--s-4) var(--s-6);
+  background: var(--paper-0);
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 var(--r-3) 0;
+}
+
+.onboarding {
+  max-width: 44rem;
+  margin: 0 auto;
+}
+
+.system-gap {
+  margin: var(--s-5) 0;
+}
+
+.logs__filter {
+  flex: 1;
+  min-width: 12rem;
+  max-width: 24rem;
+}
+
+@media (max-width: 860px) {
+  .wizard {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .wizard__rail {
+    border-radius: var(--r-3) var(--r-3) 0 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: var(--s-4);
+  }
+  .wizard__head {
+    padding: var(--s-5) var(--s-5) 0;
+  }
+  .wizard__body {
+    padding: var(--s-4) var(--s-5) var(--s-5);
+  }
+  .wizard__actions {
+    margin: auto calc(-1 * var(--s-5)) calc(-1 * var(--s-5));
+    padding: var(--s-3) var(--s-5);
+  }
+}
+
+.home-hint {
+  max-width: 18rem;
+}
+
+.home-stamp {
+  margin-top: 0.5rem;
+}
+
+/* Developer page */
+.dev-bar {
+  margin-bottom: var(--s-4);
+}
+
+.dev-tabs {
+  margin-bottom: var(--s-5);
+}
+
+.dev-swatch {
+  height: 2.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+}
+
+.dev-contrast {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--s-2);
+}
+
+.dev-contrast__row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  font-size: var(--t-sm);
+}
+
+.dev-contrast__row strong[data-bad] {
+  outline: 2px solid var(--danger);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.dev-radius {
+  width: 3.5rem;
+  height: 3.5rem;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+}
+
+.dev-pop {
+  width: 12rem;
+  padding: var(--s-4);
+  background: var(--paper-0);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  box-shadow: var(--sh-pop);
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+}
+
+.dev-track {
+  flex: 1;
+  height: 1rem;
+  background: var(--paper-2);
+  border-radius: var(--r-1);
+  position: relative;
+}
+
+.dev-runner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1rem;
+  height: 1rem;
+  background: var(--accent);
+  border-radius: var(--r-1);
+  transition-property: left;
+  transition-timing-function: var(--ease-out);
+}
+
+.dev-runner[data-run] {
+  left: calc(100% - 1rem);
+}
+
+.dev-frame {
+  padding: var(--s-5);
+  background: var(--paper-1);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-3);
+}
+
+.dev-viewport {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-3);
+  background: var(--paper-1);
+}
+
+.dev-viewport__frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 0;
+  transform-origin: top left;
+}
+
+.dev-frame .wizard {
+  height: 34rem;
+}
+
+.configs__detail .ui-panel__body {
+  padding-top: var(--s-4);
+}

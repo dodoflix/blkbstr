@@ -1,0 +1,9 @@
+#!/bin/sh
+# Fast checks on staged files before every commit. Enabled by `npm install` (core.hooksPath).
+files=$(git diff --cached --name-only --diff-filter=ACMR)
+if echo "$files" | grep -qE '\.rs$'; then
+    cargo fmt --all -- --check || exit 1
+fi
+if echo "$files" | grep -qE '^(src|index\.html|vite\.config|tsconfig)'; then
+    npx tsc --noEmit || exit 1
+fi
