@@ -22,8 +22,7 @@ pub struct DaemonInfo {
     problem: Option<String>,
 }
 
-/// Never fails: "the daemon is not installed" is the normal first-run state, not an error the UI
-/// should render as a crash.
+/// Never fails: "the daemon is not installed" is the normal first-run state.
 #[tauri::command]
 fn daemon_info() -> DaemonInfo {
     match daemon::request(Request::Ping {
@@ -66,8 +65,7 @@ fn engine_start(config: Config, ephemeral: bool) -> Result<(), daemon::Error> {
     .map(|_| ())
 }
 
-/// Keeps a trial run that would otherwise be undone. The deadline is the daemon's, so this is the
-/// only thing that can cancel it.
+/// Keeps a trial run that would otherwise be undone; the deadline is the daemon's.
 #[tauri::command]
 fn engine_confirm() -> Result<(), daemon::Error> {
     daemon::request(Request::Confirm).map(|_| ())
@@ -78,19 +76,15 @@ fn engine_stop() -> Result<(), daemon::Error> {
     daemon::request(Request::Stop).map(|_| ())
 }
 
-/// Engine, Lua runtime, nftables, distro, and any zapret2 install already on the machine.
-/// Unprivileged and local: onboarding has to say what is missing while there is still no daemon
-/// to ask, so this never needs one.
+/// Engine, Lua runtime, nftables, distro, and any zapret2 install already present. Local, so
+/// onboarding works before any daemon exists.
 #[tauri::command]
 fn detect_environment() -> detect::Environment {
     detect::environment()
 }
 
-/// Probes each host for a per-site verdict. Local network only — no daemon, nothing uploaded, and
-/// the host list never leaves the machine.
-///
-/// Blocking work on a pool thread rather than the async runtime: an unreachable host costs a full
-/// timeout, and the whole point of this call is to sit through those.
+/// Probes each host for a per-site verdict. Local only: nothing is uploaded. Runs on a pool thread
+/// because an unreachable host costs a full timeout.
 #[tauri::command]
 async fn check_reachability(
     hosts: Option<Vec<String>>,
@@ -110,24 +104,21 @@ async fn check_reachability(
     .map_err(|e| format!("the reachability check did not finish: {e}"))
 }
 
-/// The strategies auto-configuration tries, in the order worth trying them.
-///
-/// The walk itself runs in the UI, not here: each step is an ordinary start / check / stop, so
-/// progress and cancellation come for free and the privileged surface gains nothing. If the UI
-/// dies mid-walk, the trial run's own deadline puts the machine back.
+/// The strategies auto-configuration tries, in order. The walk runs in the UI: each step is an
+/// ordinary start, check and stop, and the trial run's own deadline restores the machine if the
+/// window dies.
 #[tauri::command]
 fn autoconfig_candidates() -> Vec<candidates::Candidate> {
     candidates::ranked()
 }
 
-/// What in this config will not do what it looks like it does. Pure and local — the daemon is not
-/// consulted, so the UI can lint while the user types.
+/// What in this config will not do what it looks like it does. Local, so the UI can lint as you type.
 #[tauri::command]
 fn lint_config(config: Config) -> Vec<Warning> {
     registry::lint(&config)
 }
 
-/// The Lua functions this build can offer in a strategy editor, newest-known upstream surface.
+/// The Lua functions this build can offer in a strategy editor.
 #[tauri::command]
 fn known_functions() -> Vec<&'static str> {
     registry::FUNCTIONS.iter().map(|f| f.name).collect()
@@ -139,8 +130,7 @@ fn starter_config(name: String) -> Config {
     blkbstr_core::render::starter_config(&name)
 }
 
-/// Exactly what the daemon will hand the engine. Lets the UI show the real parameter file instead
-/// of asking the user to trust that the config means what they think.
+/// Exactly what the daemon will hand the engine.
 #[tauri::command]
 fn preview_config(config: Config) -> Result<String, String> {
     let platform =
@@ -161,8 +151,7 @@ fn read_log(name: String) -> Result<String, String> {
     logs::tail(&name)
 }
 
-/// Writes a diagnostics file and returns its path. Not uploaded anywhere: engine logs name the
-/// hosts they saw, so the user reads it before deciding to send it.
+/// Writes a diagnostics file and returns its path. Not uploaded: engine logs name the hosts they saw.
 #[tauri::command]
 fn export_diagnostics(logs_wanted: Vec<String>) -> Result<String, String> {
     let status = match daemon::request(Request::Status) {
@@ -190,9 +179,7 @@ fn save_config(config: Config) -> Result<(), String> {
     configs::save(&config)
 }
 
-/// Deleting the file only. If that config is the one running, it keeps running: stopping the
-/// engine is a separate decision and doing it as a side effect of tidying up a list would be a
-/// surprise the user cannot undo.
+/// Deletes the file only. If that config is running it keeps running; stopping is a separate decision.
 #[tauri::command]
 fn delete_config(name: String) -> Result<(), String> {
     configs::delete(&name)
@@ -205,8 +192,8 @@ fn delete_config(name: String) -> Result<(), String> {
 /// Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display.
 /// ```
 ///
-/// Disabling it costs nothing here — this is a settings UI, not a compositor — and a slower
-/// renderer beats a window that never opens. Left alone if the user set it themselves.
+/// Disabled unless the user set the variable themselves; a slower renderer beats a window that
+/// never opens.
 #[cfg(target_os = "linux")]
 fn work_around_webkit_dmabuf() {
     if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {

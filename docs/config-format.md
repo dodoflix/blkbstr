@@ -77,9 +77,9 @@ function with different arguments, which a map could not express either.
 
 Two independent numbers:
 
-- **`schema`** — this file format. Higher than the running build is rejected rather than
+- **`schema`** - this file format. Higher than the running build is rejected rather than
   half-read.
-- **`compat`** — the `NFQWS2_COMPAT_VER` the actions were written against. Upstream bumps it on
+- **`compat`** - the `NFQWS2_COMPAT_VER` the actions were written against. Upstream bumps it on
   every API break (v2 replaced the `stun_binding_req` payload, v3 restructured `desync.track`). A
   mismatch *warns*: the actions may still work, but their arguments may have changed meaning.
 
@@ -106,19 +106,19 @@ before acting, because a privileged process does not trust its caller.
 
 `lint()` reports what will not do what it appears to. It never fails a config.
 
-- An action naming a Lua function this build does not know — usually a typo. It is **passed
+- An action naming a Lua function this build does not know - usually a typo. It is **passed
   through**, not dropped, because it may be a function from a newer upstream release.
 - A `compat` mismatch.
 - An enabled strategy with no actions: it matches traffic and does nothing to it.
 
-The authority on whether a config actually loads is the engine's own `--dry-run`, which the daemon
+The authority on whether a config actually loads is the engine's own `--intercept=0`, which the daemon
 runs before touching the network stack. It checks options and file existence; it does **not**
 validate Lua, so a config can pass and still fail at runtime.
 
 ## Platform portability
 
 **A config is portable as written.** The attacks are Lua, so they do not vary by platform; only the
-interception layer does — `--qnum` on Linux, `--wf-*` on Windows, `--port` on BSD — and none of
+interception layer does - `--qnum` on Linux, `--wf-*` on Windows, `--port` on BSD - and none of
 that is user config, because the daemon supplies it. See
 [adr/0004-portable-config-that-warns.md](adr/0004-portable-config-that-warns.md).
 

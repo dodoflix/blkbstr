@@ -106,7 +106,7 @@ export function Tokens() {
             {SIZES.map((n) => (
               <Row key={n} gap={4} align="baseline">
                 <Text size="xs" color={3} mono style={{ width: "9rem", flex: "none" }}>{n} {values[n]}</Text>
-                <span style={{ fontSize: `var(--${n})`, fontWeight: 600 }}>Sites should load.</span>
+                <span style={{ fontSize: `var(--${n})`, fontWeight: 600 }}>Blocked sites load.</span>
               </Row>
             ))}
             <Row gap={4} align="baseline">

@@ -2,9 +2,8 @@ import type { ReactNode } from "react";
 import { cx } from "./cx";
 import { STATE_TONE, type State } from "./types";
 
-/** State drawn as a shape first and a colour second. One square family, told apart by fill and
- *  glyph: solid with a check holds, hollow is idle, dashed is in progress, solid with a cross is
- *  blocked, a square inside a square is attention. */
+/** State drawn as a tinted square with a glyph: check holds, hollow is idle, dashed is in progress,
+ *  cross is blocked, bar and dot is attention. Shape first, colour second. */
 export function StateMark({ state, size = 16, label }: { state: State; size?: number; label?: string }) {
   return (
     <svg
@@ -58,8 +57,7 @@ export function StateMark({ state, size = 16, label }: { state: State; size?: nu
   );
 }
 
-/** A rubber stamp: the one place the app is allowed to shout. It only lands when `animate` is set,
- *  which is for a moment that earns it, never for a screen that merely loads. */
+/** A rubber stamp, the one place the app shouts. It only lands when `animate` is set. */
 export function Stamp({
   children,
   tone = "accent",
@@ -94,8 +92,7 @@ export function Steps({
   steps: Step[];
   current: string;
   onSelect?: (id: string) => void;
-  /** Index of the furthest step the user may jump to. Defaults to the current one, so only earlier
-   *  steps are clickable. */
+  /** Furthest step index that can be jumped to; defaults to the current one. */
   reachable?: number;
   orientation?: "vertical" | "horizontal";
   className?: string;

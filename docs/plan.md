@@ -3,16 +3,13 @@
 ## What this is
 
 Blockbuster (`blkbstr`) is a desktop GUI for [zapret2](https://github.com/bol-van/zapret2): it
-installs the engine, generates and manages configurations, runs it as a background service, and
-shows what it is doing — on Linux, Windows and the BSDs.
+installs the engine, manages configurations, runs it as a background service and shows what it is
+doing, on Linux, Windows and the BSDs.
 
-zapret2 describes itself as *"a tool for enthusiasts, not a ready-made solution for beginners"*.
-Its own documentation is a 5,000-line manual, its strategies are Lua programs, and a working
-setup is a parameter file full of lines like
-`--lua-desync=fake:blob=fake_default_tls:badsum:strategy=1`. That is fine for the people who wrote
-it and a wall for everyone else — which matters, because the people most in need of it are rarely
-the people most comfortable with that string. Blockbuster's job is to make a working configuration
-reachable without the user ever seeing it, while never hiding it from someone who wants it.
+zapret2 calls itself "a tool for enthusiasts, not a ready-made solution for beginners". Its
+strategies are Lua programs and a working setup is a parameter file full of lines like
+`--lua-desync=fake:blob=fake_default_tls:badsum:strategy=1`. Blockbuster makes a working
+configuration reachable without the user seeing that, and never hides it from someone who wants it.
 
 ## Non-goals
 
@@ -20,7 +17,7 @@ reachable without the user ever seeing it, while never hiding it from someone wh
   upstream, and we do not ship our own attacks.
 - Not a VPN, proxy, or traffic router. It manipulates the local packet path only.
 - Not a mobile app. Desktop only; the Android/iOS network-extension story is a different project.
-- Not a macOS app. Upstream does not support macOS and does not expect to — Apple removed
+- Not a macOS app. Upstream does not support macOS and does not expect to - Apple removed
   `ipdivert` from the kernel and there is no replacement interception facility.
 - No account, no server, no telemetry. Optional GitHub sync is the user's own repo.
 
@@ -35,34 +32,33 @@ a different OS.
 An unprivileged Tauri app (`blkbstr`) talks over a local socket to a privileged service
 (`blkbstrd`) that owns the engine process and the firewall rules. Configs are portable JSON owned
 by the user; the daemon renders them into an nfqws2 parameter file, validates it with the engine's
-own `--dry-run`, installs the interception rules and supervises the process. Details in
+own `--intercept=0` run, installs the interception rules and supervises the process. Details in
 [architecture.md](architecture.md).
 
 ## Milestones
 
-Each milestone is shippable — a release with a working feature — not a layer of an unfinished
-cake. Numbering is order, not dates.
+Each milestone is shippable: a release with a working feature. Numbering is order, not dates.
 
-### M0 — Skeleton *(done)*
+### M0 - Skeleton *(done)*
 
 The repository this document lives in.
 
 - Cargo workspace: `blkbstr-core` (config model, function registry, renderer, protocol),
   `blkbstr-daemon` (socket server), `src-tauri` (GUI backend, daemon client, config file CRUD).
-- React + Radix Themes shell with a status panel and a config list, following the OS theme.
+- React shell with a status panel and a config list, following the OS theme.
 - Linux packaging: systemd unit with a restricted capability set, polkit action, install and
   uninstall scripts.
 - CI: build and test on all three OSes.
 
 Everything except the engine itself: validation, linting, transport, privilege boundary and
-packaging, so M1 fills a hole rather than inventing a shape.
+packaging.
 
-### M1 — It actually works on Linux
+### M1 - It actually works on Linux
 
 The first release that does the thing.
 
 - [x] Render a `Config` to an nfqws2 parameter file, consumed via `@file`.
-- [x] Validate with the engine's own `--dry-run` before touching the network stack.
+- [x] Validate with the engine's own `--intercept=0` before touching the network stack.
 - [x] nftables interception in a dedicated `inet blkbstr` table, so teardown is one atomic delete.
 - [x] Locate the engine binary; refuse clearly, by name, when it is missing.
 - [x] Supervise the process; notice an engine that exits by itself and pull the rules with it.
@@ -76,7 +72,7 @@ The first release that does the thing.
 **Done when:** a Linux user installs, picks a config, and blocked sites load; rebooting keeps it
 working; stopping leaves `nft list ruleset` exactly as it was before starting.
 
-### M2 — Getting to a working config without knowing anything
+### M2 - Getting to a working config without knowing anything
 
 The onboarding half. This is where the project earns its existence.
 
@@ -84,7 +80,7 @@ The onboarding half. This is where the project earns its existence.
   (DNS poisoned / SNI reset / TLS blocked / fine).
 - Auto-configuration: walk a ranked list of candidate strategies, apply each in ephemeral mode,
   re-test, keep the first that works. Save the winner under a user-chosen name.
-- First-run wizard chaining detection → install → check → auto-configure, re-runnable later from
+- First-run wizard chaining detection, install, check, auto-configure, re-runnable later from
   the app.
 - Import an existing zapret2 installation: detect it, back the current config up somewhere the
   user is told about, import it as a preset named `Legacy`.
@@ -94,10 +90,10 @@ The onboarding half. This is where the project earns its existence.
 **Done when:** someone who has never heard of DPI gets a working, saved, named config by clicking
 through a wizard.
 
-### M3 — Windows
+### M3 - Windows
 
 - `winws2` backend for the same `Config` type. Interception is built into the process via
-  WinDivert, so there are no firewall rules to install or remove — a smaller job than Linux.
+  WinDivert, so there are no firewall rules to install or remove - a smaller job than Linux.
 - Windows Service installed by one UAC-elevated step; GUI talks to it over a named pipe with an
   ACL restricted to the installing user.
 - Signed installer and binaries. Documented process for submitting to AV vendors, because
@@ -106,25 +102,25 @@ through a wizard.
 
 **Done when:** the same config file works on Windows and Linux.
 
-### M4 — Living with it
+### M4 - Living with it
 
 - Auto-update via Tauri's updater plugin against GitHub Releases, with the *engine* updated
-  separately from the *app* — they have different risk profiles and different release cadences.
+  separately from the *app* - they have different risk profiles and different release cadences.
 - System tray / menu bar toggle with a status indicator.
 - Config sync to a user-supplied GitHub repo, private by default, with an explicit warning that a
   config reveals which sites someone visits and which strategies work in their country.
 - Localisation. Not an afterthought: the userbase is disproportionately non-English-speaking.
-- Accessibility pass — keyboard navigation, screen reader labels, contrast.
+- Accessibility pass - keyboard navigation, screen reader labels, contrast.
 
-### M5 — FreeBSD and OpenBSD
+### M5 - FreeBSD and OpenBSD
 
 The cheapest platform to add, because upstream already ships `dvtws2` for it.
 
 - `dvtws2` backend, driven by the same `Config`; interception via ipfw (FreeBSD) or pf (OpenBSD).
 - rc.d service script in place of the systemd unit.
 
-There is no macOS milestone. Upstream does not support macOS and does not expect to — Apple
-removed `ipdivert` from the kernel and there is no replacement — so it would mean writing a Network
+There is no macOS milestone. Upstream does not support macOS and does not expect to - Apple
+removed `ipdivert` from the kernel and there is no replacement - so it would mean writing a Network
 Extension *and* a packet manipulator that does not exist upstream. That is a different project.
 
 ### Ongoing

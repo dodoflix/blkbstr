@@ -35,8 +35,8 @@ type Page = "home" | "configs" | "logs" | "system" | "developer";
 /** Developer tools exist only in dev builds: the constant folds to null and the chunk is never emitted. */
 const DeveloperPage = import.meta.env.DEV ? lazy(() => import("./features/dev/DeveloperPage")) : null;
 
-/** Home is the setup wizard until a config is saved, and a status page after. Leaving the wizard is
- *  explicit, so finishing it can show its last step instead of flipping away underneath. */
+/** Home is the setup wizard until a config is saved, then a status page. Leaving the wizard is
+ *  explicit so finishing it can show its last step. */
 function Home({ wizard, setWizard }: { wizard: boolean | undefined; setWizard: (on: boolean) => void }) {
   const { ready, configs } = useBackend();
   const { onboarded } = usePrefs();
@@ -66,8 +66,7 @@ function Shell() {
     const hash = location.hash.slice(1);
     return (["home", "configs", "logs", "system", "developer"] as const).find((p) => p === hash && (p !== "developer" || import.meta.env.DEV)) ?? "home";
   });
-  // Pages stay mounted once visited, so leaving one never throws away its state (a half-finished
-  // setup, a log filter, a scroll position).
+  // Pages stay mounted once visited, so leaving one keeps its state.
   const [visited, setVisited] = useState<Page[]>([page]);
   const setPage = (next: Page) => {
     location.hash = next;

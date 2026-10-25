@@ -3,20 +3,17 @@
 ## The split
 
 ```
-┌──────────────────────────────┐        ┌──────────────────────────────┐
-│  blkbstr  (unprivileged)     │        │  blkbstrd  (root / SYSTEM)   │
-│                              │        │                              │
-│  React + src/ui design system│        │  socket server               │
-│      │ invoke()              │        │      │                       │
-│  src-tauri                   │        │  engine.rs   (supervisor)    │
-│   ├ daemon.rs  ──────────────┼── JSON ┼─▶ nfqws2 / winws2 / dvtws2   │
-│   ├ configs.rs (user files)  │  lines │      │                       │
-│   └ commands                 │        │  firewall.rs (nft table)     │
-└──────────────────────────────┘        └──────────────────────────────┘
-        ~/.config/blkbstr                       /var/log/blkbstr
-        configs, backups                        rolling logs  ──┐
-              ▲                                                 │
-              └──────────── read-only tail ─────────────────────┘
+ blkbstr (unprivileged)              blkbstrd (root / SYSTEM)
+ +-----------------------------+     +-----------------------------+
+ | React + src/ui              |     | socket server               |
+ |   | invoke()                |     |   |                         |
+ | src-tauri                   |     | engine.rs    (supervisor)   |
+ |   daemon.rs ----------------+-----+-> nfqws2 / winws2 / dvtws2  |
+ |   configs.rs (user files)   | JSON|   |                         |
+ |   commands                  | lines firewall.rs  (nft table)    |
+ +-----------------------------+     +-----------------------------+
+   ~/.config/blkbstr                   /var/log/blkbstr
+   configs, backups                    rolling logs, tailed read-only by the GUI
 ```
 
 Both halves depend on `blkbstr-core`, which holds the config model, the Lua function registry and
@@ -24,7 +21,7 @@ the protocol types. Anything both sides must agree on lives there; nothing else 
 
 ## Why two processes
 
-zapret2 manipulates the packet path — nfqueue plus nftables on Linux, WinDivert on Windows, ipfw
+zapret2 manipulates the packet path - nfqueue plus nftables on Linux, WinDivert on Windows, ipfw
 or pf on the BSDs. That needs elevation. A GUI does not.
 
 Running the whole app elevated would mean a browser engine, a JavaScript runtime and every
@@ -38,7 +35,7 @@ the engine. No repeated `sudo`, no password prompt per toggle, and a clear thing
 
 **What needs elevation:** starting and stopping the engine, changing firewall rules, installing or
 removing the service. **What does not:** reading status, reading logs, and everything to do with
-configs — creating, editing, validating, linting, importing, syncing. Config files live in the
+configs - creating, editing, validating, linting, importing, syncing. Config files live in the
 user's own directory and are only handed to the daemon at the moment of starting.
 
 ## Crates
@@ -48,7 +45,7 @@ user's own directory and are only handed to the daemon at the moment of starting
 | `crates/blkbstr-core` | `blkbstr-core` | `Config`, the Lua function registry and `lint`, the parameter-file renderer, the wire protocol, shared paths |
 | `crates/blkbstr-daemon` | `blkbstr-daemon` (bin `blkbstrd`) | Socket server, engine supervision, nftables interception |
 | `src-tauri` | `blkbstr` | Tauri commands, daemon client, config file CRUD |
-| `src` | — | React frontend |
+| `src` | - | React frontend |
 
 ## Request flow
 
@@ -59,21 +56,21 @@ Starting the engine, end to end:
 2. The GUI calls `engine_start`, which opens a fresh socket connection and sends one
    `Request::Start`.
 3. The daemon validates the config, logs the same warnings from its own side, writes the parameter
-   file, and runs the engine with `--dry-run` to have the engine itself check it.
+   file, and runs the engine with `--intercept=0` to have the engine itself check it.
 4. Only then does it install the nftables rules and spawn the engine. Rules go last because rules
    pointing at a queue nothing reads is the state that breaks the user's network.
 5. The daemon replies `Ok`, or `Error` with a code the UI can act on.
 6. The GUI polls `engine_status` for pid, uptime, engine version and the last error.
 
 Teardown reverses it: rules first, then the process. The `Firewall` value also removes the table on
-`Drop`, and the daemon clears a stale table at startup, so the three ways of dying — clean stop,
-panic, SIGKILL — all end with the machine as it was.
+`Drop`, and the daemon clears a stale table at startup, so the three ways of dying - clean stop,
+panic, SIGKILL - all end with the machine as it was.
 
 ## Supervision
 
 A monitor thread checks on the engine every two seconds. When it finds one that exited by itself it
-removes the rules immediately — rules must not outlive the process reading the queue, not even for
-the seconds until a restart — and then asks `supervisor.rs` what to do.
+removes the rules immediately - rules must not outlive the process reading the queue, not even for
+the seconds until a restart - and then asks `supervisor.rs` what to do.
 
 The policy is a sliding window: five restarts within sixty seconds, with backoff of 1s, 2s, 4s, 8s,
 15s, and then it gives up and leaves the engine down with the reason in `last_error`. Giving up is
@@ -100,7 +97,7 @@ a persistent connection would buy reconnect logic and nothing else.
 
 The daemon writes rolling daily files to `/var/log/blkbstr` (`C:\ProgramData\blkbstr\logs` on
 Windows) and to stderr, so the service manager captures them too. The GUI tails the files directly
-rather than streaming over the socket — a log stream would mean framing, backpressure and
+rather than streaming over the socket - a log stream would mean framing, backpressure and
 subscription state on the privileged side, in exchange for reading a file the user can already
 read.
 
@@ -108,8 +105,8 @@ Filtering the daemon's own output is `BLKBSTR_LOG` (`tracing-subscriber` env-fil
 defaulting to `info`.
 
 The GUI's Logs tab lists the files, re-reads the last 256 KB of the selected one every two seconds
-while "Follow" is on, and filters lines client-side. Export writes a single file — status plus
-every log — into the user's config directory and reveals it. It is never uploaded: engine logs name
+while "Follow" is on, and filters lines client-side. Export writes a single file - status plus
+every log - into the user's config directory and reveals it. It is never uploaded: engine logs name
 the hosts they saw, so the user reads it before deciding to send it anywhere.
 
 ## Frontend

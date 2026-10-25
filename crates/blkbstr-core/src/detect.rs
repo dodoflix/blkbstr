@@ -1,8 +1,5 @@
-//! What is already on this machine, before Blockbuster installs anything.
-//!
-//! Runs unprivileged from the GUI, because onboarding has to say what is missing while there is
-//! still no daemon to ask. Every probe is best-effort: "not found" is the normal first-run answer,
-//! not an error, so nothing here returns a `Result`.
+//! What is already on this machine. Runs unprivileged so onboarding can say what is missing before
+//! any daemon exists; "not found" is a normal answer, so nothing returns a `Result`.
 
 use crate::registry::Platform;
 use serde::Serialize;
@@ -12,8 +9,7 @@ use std::process::Command;
 #[derive(Debug, Clone, Serialize)]
 pub struct Tool {
     pub path: PathBuf,
-    /// First line of the tool's own version output, verbatim — parsing it further is the caller's
-    /// problem, and showing it unedited is what makes a bug report useful.
+    /// First line of the tool's own version output, verbatim.
     pub version: Option<String>,
 }
 
@@ -31,9 +27,7 @@ pub struct LuaRuntime {
     pub flavour: LuaFlavour,
     pub major: u32,
     pub minor: u32,
-    /// zapret2's attacks are Lua, not C. Below LuaJIT 2.1 or PUC 5.3 the engine starts and then
-    /// fails to load them, which reads as "nothing happened" — so this is checked before any of
-    /// the rest is offered.
+    /// Below LuaJIT 2.1 or Lua 5.3 the engine starts and then fails to load its Lua attacks.
     pub supported: bool,
 }
 
@@ -63,7 +57,7 @@ pub struct Environment {
     pub lua: Option<LuaRuntime>,
     pub nftables: Option<Tool>,
     pub distro: Option<Distro>,
-    /// A zapret2 tree already on the machine — something to import from rather than write over.
+    /// A zapret2 tree already on the machine - something to import from rather than write over.
     pub existing_install: Option<PathBuf>,
 }
 
@@ -106,21 +100,18 @@ pub fn locate_engine(binary: &str) -> Option<PathBuf> {
         .iter()
         .map(|d| Path::new(d).join(binary)),
     );
-    // PATH read directly rather than shelling out to `command -v`: a root daemon that never execs
-    // a shell is one less thing for an LSM profile to allow and for a reader to worry about.
+    // Read PATH directly rather than shelling out to `command -v`, so a root daemon never execs a shell.
     if let Some(path) = std::env::var_os("PATH") {
         candidates.extend(std::env::split_paths(&path).map(|d| d.join(binary)));
     }
     candidates.into_iter().find(|p| p.is_file())
 }
 
-/// zapret2's own Lua library, in the order its init script loads it. `zapret-lib.lua` defines the
-/// primitives the others build on, so the order is not decorative.
+/// zapret2's Lua library in the order its init script loads it; `zapret-lib.lua` comes first.
 pub const LUA_SCRIPTS: &[&str] = &["zapret-lib.lua", "zapret-antidpi.lua", "zapret-auto.lua"];
 
-/// Looks for the directory holding [`LUA_SCRIPTS`]. Distribution packages split the binary from the
-/// scripts — the AUR `zapret2-bin` puts `nfqws2` on PATH and the Lua under `/opt/zapret2/lua` — so
-/// this is searched independently of the engine.
+/// Looks for the directory holding [`LUA_SCRIPTS`]. Packages split the binary from the scripts
+/// (the AUR `zapret2-bin` has `nfqws2` on PATH and the Lua under `/opt/zapret2/lua`).
 pub fn locate_lua_dir() -> Option<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(exe) = std::env::current_exe() {
@@ -144,8 +135,7 @@ pub fn locate_lua_dir() -> Option<PathBuf> {
         .find(|d| d.join(LUA_SCRIPTS[0]).is_file())
 }
 
-/// The Lua files to pass as `--lua-init`, in load order. Missing ones are skipped rather than
-/// failing: only `zapret-lib.lua` is load-bearing for every action.
+/// The Lua files to pass as `--lua-init`, in load order. Missing ones are skipped.
 pub fn lua_init_scripts(dir: &Path) -> Vec<String> {
     LUA_SCRIPTS
         .iter()
@@ -155,9 +145,8 @@ pub fn lua_init_scripts(dir: &Path) -> Vec<String> {
         .collect()
 }
 
-/// The best Lua on the machine. Prefers a supported runtime over a newer-looking one: a box with
-/// both `lua` 5.1 and `lua5.4` installed has a working setup, and reporting the 5.1 would send the
-/// user off installing something they already have.
+/// The best Lua on the machine. A supported runtime wins over a newer-looking one, so a box with
+/// `lua` 5.1 and `lua5.4` is not told to install something it has.
 fn lua_runtime() -> Option<LuaRuntime> {
     let found: Vec<LuaRuntime> = ["luajit", "lua", "lua5.4", "lua5.3"]
         .iter()
@@ -229,9 +218,8 @@ fn parse_os_release(text: &str) -> (Option<String>, Option<String>, Option<Strin
     (value("ID"), value("ID_LIKE"), value("PRETTY_NAME"))
 }
 
-/// From the distro id, never from which binaries happen to exist: a machine can carry a stray
-/// `apt-get` from a container tool or an old experiment, and an Arch box that answers "apt" gets
-/// told to install packages that are not there.
+/// From the distro id, never from which binaries exist: a stray `apt-get` on an Arch box would
+/// give the wrong install advice.
 fn package_manager_for(id: &str, id_like: Option<&str>) -> Option<PackageManager> {
     // ID_LIKE names the parent, which is how derivatives are covered without listing them all.
     std::iter::once(id)
@@ -248,8 +236,7 @@ fn package_manager_for(id: &str, id_like: Option<&str>) -> Option<PackageManager
         })
 }
 
-/// Identified by its `config` file, because that is the thing worth importing. A bare `nfqws2` on
-/// PATH is a binary, not an installation with settings to migrate.
+/// Identified by its `config` file, the thing worth importing; a bare `nfqws2` on PATH is not an install.
 fn existing_install() -> Option<PathBuf> {
     ["/opt/zapret2", "/usr/local/zapret2"]
         .iter()
@@ -282,8 +269,8 @@ fn version_of(path: &Path, arg: &str) -> Option<String> {
 mod tests {
     use super::*;
 
-    /// Runs every probe against the machine the tests are on. Asserts almost nothing on purpose:
-    /// what is installed varies, and the point is that probing a bare machine cannot panic or hang.
+    /// Runs every probe on this machine and asserts little, since what is installed varies. Probing
+    /// a bare machine must not panic or hang.
     #[test]
     fn probing_this_machine_answers_something() {
         let env = environment();

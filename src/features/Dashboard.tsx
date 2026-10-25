@@ -57,9 +57,9 @@ export function HomePlaceholder() {
   );
 }
 
-/** The sheet at the top of Home: one sentence says what the machine is doing, one button changes it. */
+/** Top of Home: one sentence for what the machine is doing, one button to change it. */
 function StatusSheet({ onSetup }: { onSetup: () => void }) {
-  const { status, configs, act, env } = useBackend();
+  const { status, configs, act, env, report } = useBackend();
   const { advanced } = usePrefs();
   const now = useNow(30_000);
   const [last, setLast] = useLocalStorage<string | undefined>("blkbstr.lastConfig", undefined);
@@ -67,6 +67,7 @@ function StatusSheet({ onSetup }: { onSetup: () => void }) {
   const on = Boolean(status?.running);
   const trial = status?.revert_in_seconds !== undefined;
   const missing = !env?.engine;
+  const stillBlocked = report?.sites.filter((s) => s.verdict !== "fine").length;
 
   const turnOn = () =>
     act(async () => {
@@ -93,7 +94,11 @@ function StatusSheet({ onSetup }: { onSetup: () => void }) {
         <span className="home-state__word" data-on>
           On.
         </span>{" "}
-        Blocked sites should load.
+        {stillBlocked === undefined
+          ? "Checking your sites."
+          : stillBlocked === 0
+            ? "Blocked sites load."
+            : `${plural(stillBlocked, "site")} still blocked.`}
       </>
     );
     sub = `Running ${status?.active_config}${status?.started_at ? ` for ${uptime(status.started_at, now)}` : ""}.`;

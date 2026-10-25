@@ -25,8 +25,7 @@ export function useAppearance(): Appearance {
 
 const dark = () => window.matchMedia("(prefers-color-scheme: dark)");
 
-/** Owns every look-and-feel preference and writes them to <html> as data attributes, which is all
- *  the stylesheet reads. Swap the storage here to sync them elsewhere. */
+/** Owns the look-and-feel preferences (theme, motion) and writes them to <html> as data attributes. */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useLocalStorage<ThemePreference>("blkbstr.theme", "system");
   const [motion, setMotion] = useLocalStorage<Motion>("blkbstr.motion", "system");

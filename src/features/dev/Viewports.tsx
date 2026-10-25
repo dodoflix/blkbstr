@@ -4,8 +4,7 @@ import { Field, Row, Select, Stack, Text } from "../../ui";
 const SIZES = ["720x540", "859x600", "861x600", "980x700", "1280x800", "1440x900"];
 const PAGES = ["home", "configs", "logs", "system"];
 
-/** The live app in an iframe of an exact size, so media queries fire as they would in a window of
- *  that size. Scaled down to fit, never up. */
+/** The live app in an iframe of an exact size, so media queries fire as in a window that size. */
 export function Viewports() {
   const [size, setSize] = useState("980x700");
   const [page, setPage] = useState("home");

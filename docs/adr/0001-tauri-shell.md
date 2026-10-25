@@ -26,17 +26,17 @@ mechanism this project wants anyway.
 
 ## Costs
 
-The system webview differs per platform — WebKitGTK, WebView2, WKWebView — so rendering bugs are
+The system webview differs per platform - WebKitGTK, WebView2, WKWebView - so rendering bugs are
 per-platform and CSS support is whatever the oldest supported OS ships. That is the price of not
 bundling a browser, and it is worth it here.
 
 ## Alternatives
 
-**Electron** — larger, and a Node backend means a second language for the privileged side or an
+**Electron** - larger, and a Node backend means a second language for the privileged side or an
 awkward FFI to it.
 
-**Native per platform** — best result, three times the work, and no realistic way to keep three
+**Native per platform** - best result, three times the work, and no realistic way to keep three
 implementations at feature parity in a project this size.
 
-**GTK/Qt via Rust bindings** — smaller still, but the ecosystem for the kind of guided,
+**GTK/Qt via Rust bindings** - smaller still, but the ecosystem for the kind of guided,
 wizard-driven UI this project needs is thinner.

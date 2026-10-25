@@ -1,5 +1,4 @@
-/** The app mark without its badge, for use on the app's own surfaces. The blocks follow the ink
- *  colour so the mark reads on light and dark; the escaping block keeps its orange. */
+/** The app mark without its badge. The blocks follow the ink colour; the escaping block stays orange. */
 export function BrandMark({ size = 22 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="14 14 204 204" fill="none" aria-hidden focusable="false">

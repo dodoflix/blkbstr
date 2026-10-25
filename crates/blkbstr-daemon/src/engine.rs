@@ -1,9 +1,7 @@
-//! Runs and supervises the zapret2 packet manipulator.
-//!
-//! Order matters and is the same on every path: validate the config, write the parameter file,
-//! ask the engine to check it with `--intercept=0`, install the firewall rules, then start it.
-//! Rules go in last because rules pointing at a queue nothing reads is the state that breaks a
-//! user's network, and they come out first on the way down.
+//! Runs and supervises the zapret2 packet manipulator. The order is the same on every path:
+//! validate the config, write the parameter file, check it with `--intercept=0`, install the
+//! firewall rules, start the engine. Rules go in last and come out first, because rules pointing at
+//! a queue nothing reads break the user's network.
 
 use crate::firewall::{self, Firewall, InterceptSpec};
 use crate::supervisor::{Decision, Supervisor};
@@ -25,15 +23,13 @@ struct Active {
     started_at: Option<u64>,
     /// Set while waiting out a restart backoff; the engine is down until this passes.
     restart_at: Option<Instant>,
-    /// Dead-man's switch for a trial run. It lives here rather than in the GUI because the case it
-    /// exists for is the one where the GUI cannot help: a strategy that takes the network down
-    /// with it, or a client that crashed while the rules were up.
+    /// Dead-man's switch for a trial run. It lives here, not in the GUI, because it exists for
+    /// when the GUI cannot help: a strategy that takes the network down, or a client that crashed.
     revert_at: Option<Instant>,
 }
 
 /// Long enough to open a browser and look at a site, short enough that walking away from a broken
-/// network fixes it. `BLKBSTR_REVERT_SECONDS` shortens it, the same way the `BLKBSTR_*` path
-/// overrides let the daemon be exercised without being installed.
+/// network fixes it. `BLKBSTR_REVERT_SECONDS` overrides it.
 fn revert_after() -> Duration {
     std::env::var("BLKBSTR_REVERT_SECONDS")
         .ok()
@@ -88,9 +84,8 @@ impl Engine {
         }
     }
 
-    /// Brings back whatever was running before the machine went down. Failure is logged, never
-    /// fatal: a daemon that refuses to start because a saved config went stale is worse than one
-    /// that comes up idle and says why.
+    /// Brings back what was running before shutdown. Failure is logged, not fatal: a daemon that
+    /// refuses to start over a stale config is worse than one that comes up idle and says why.
     pub fn restore(&mut self) {
         kill_orphan();
         let Some(config) = load_saved() else {
@@ -103,10 +98,8 @@ impl Engine {
         }
     }
 
-    /// Drives supervision. Called on a timer rather than from a `waitpid` thread, because the
-    /// engine is a single child that restarts at most a few times a minute.
-    ///
-    /// ponytail: polling. Swap for SIGCHLD if the daemon ever supervises more than one process.
+    /// Drives supervision from a timer rather than a `waitpid` thread; the engine is one child.
+    /// Polling is enough until the daemon supervises more than one process.
     pub fn tick(&mut self) {
         if self
             .active
@@ -116,8 +109,7 @@ impl Engine {
         {
             tracing::warn!("nobody confirmed the trial run; putting the machine back");
             let outcome = self.stop();
-            // Set after the stop, which clears it: this is the reason the engine is down and the
-            // user needs to see it, having quite possibly been unable to reach anything.
+            // Set after the stop, which clears it: the user needs the reason the engine is down.
             self.last_error = Some(match outcome {
                 Ok(()) => "the trial run was not confirmed, so it was reverted".into(),
                 Err(e) => format!("reverting the unconfirmed trial run failed: {e:#}"),
@@ -200,9 +192,8 @@ impl Engine {
         self.supervisor.reset();
         self.spawn(config, ephemeral)?;
 
-        // Persisted only after a successful start, so a config that cannot run is never the one
-        // the machine tries to bring up at boot. Ephemeral runs are never persisted: not
-        // surviving a restart is the whole point of them.
+        // Persisted only after a successful start, so a config that cannot run is never brought up
+        // at boot; ephemeral runs are never persisted.
         if !ephemeral {
             if let Err(e) = save_active(config) {
                 tracing::warn!(error = %e, "could not save the active config; it will not return on boot");
@@ -275,9 +266,8 @@ impl Engine {
         Ok(())
     }
 
-    /// Runs the config with `--intercept=0`: options are checked, the Lua is loaded and every
-    /// action is resolved, then the engine exits without opening NFQUEUE. `--dry-run` is the
-    /// weaker check — it returns 0 for an action no Lua defines — so this is used instead.
+    /// Runs the config with `--intercept=0`: options are checked, Lua loaded and actions resolved,
+    /// then the engine exits. `--dry-run` is weaker: it returns 0 for an action no Lua defines.
     fn validate(&self, params_path: &str) -> Result<()> {
         let out = Command::new(&self.binary)
             .args(render::run_args(params_path))
@@ -312,13 +302,9 @@ impl Engine {
     }
 
     /// Kills the engine and removes the rules on the way out of the process. Unlike [`stop`] it
-    /// leaves the saved config alone — this is the machine going down, not a decision to stay
-    /// stopped — and it never fails, because there is nobody left to report a failure to.
-    ///
-    /// Without this the engine outlives a killed daemon, keeps NFQUEUE bound, and every later
-    /// start dies with `nfq_create_queue(): Operation not permitted`.
-    ///
-    /// ponytail: unix only, because only the signal thread calls it. Windows needs a console
+    /// keeps the saved config (the machine is going down, not stopping by choice) and never fails.
+    /// Without it the engine outlives a killed daemon, keeps NFQUEUE bound, and every later start
+    /// dies with `nfq_create_queue(): Operation not permitted`. Unix only; Windows needs a console
     /// control handler wired to the same method before it ships.
     #[cfg(unix)]
     pub fn shutdown(&mut self) {
@@ -331,13 +317,10 @@ impl Engine {
     }
 }
 
-/// Kills an engine left behind by a daemon that died without tearing it down. It still holds
-/// NFQUEUE, so without this every start fails with `nfq_create_queue(): Operation not permitted`
-/// until someone finds the process by hand.
-///
-/// Found by scanning `/proc` for our own parameter file rather than by reading the pidfile:
-/// nfqws2 only writes that under `--daemon`, and the daemon supervises the engine as a child
-/// instead, so the file is truncated to zero bytes and never filled in.
+/// Kills an engine left behind by a daemon that died without tearing it down; it still holds
+/// NFQUEUE, so every start fails with `nfq_create_queue(): Operation not permitted`. Found by
+/// scanning `/proc` for our parameter file, because nfqws2 only writes its pidfile under
+/// `--daemon`, which the daemon does not use.
 #[cfg(target_os = "linux")]
 fn kill_orphan() {
     let params = format!("@{}", paths::runtime_dir().join("nfqws2.conf").display());
@@ -383,8 +366,8 @@ fn clear_saved() -> Result<()> {
     }
 }
 
-/// `None` when there is nothing to restore, or when what is there is unusable. Re-validated on the
-/// way in because this file decides what a root process runs.
+/// `None` when there is nothing to restore or it is unusable. Re-validated, since this file
+/// decides what a root process runs.
 fn load_saved() -> Option<Config> {
     let path = saved_path();
     let text = std::fs::read_to_string(&path).ok()?;
@@ -403,8 +386,7 @@ fn parse_saved(text: &str) -> Result<Config, String> {
     Ok(config)
 }
 
-/// Ports the config actually cares about decide what gets queued. Intercepting more than the
-/// strategies match is pure CPU cost.
+/// Intercept only the ports the strategies match; more is pure CPU cost.
 fn intercept_spec(config: &Config, queue_num: u16) -> Result<InterceptSpec> {
     let enabled = || config.strategies.iter().filter(|s| s.enabled);
     let mut spec = InterceptSpec::new(firewall::default_route_iface()?, queue_num);
@@ -434,8 +416,8 @@ fn collect_ports<'a>(
 
 fn lua_init() -> Result<Vec<String>> {
     let dir = detect::locate_lua_dir().context(
-        "zapret2's Lua scripts were not found. They ship with the engine — look for \
-         zapret-lib.lua under /opt/zapret2/lua — and without them no desync action exists",
+        "zapret2's Lua scripts were not found. They ship with the engine - look for \
+         zapret-lib.lua under /opt/zapret2/lua - and without them no desync action exists",
     )?;
     Ok(detect::lua_init_scripts(&dir))
 }
@@ -523,8 +505,7 @@ mod tests {
     fn a_config_that_selects_nothing_is_refused() {
         let mut cfg = Config::new("t");
         cfg.strategies = vec![strategy("a", None, None)];
-        // Fails either on the port check or earlier on there being no default route in CI; both
-        // are refusals, which is the point.
+        // Refused either on the port check or on there being no default route in CI.
         assert!(intercept_spec(&cfg, 200).is_err());
     }
 
@@ -539,8 +520,8 @@ mod tests {
         let good = render::starter_config("saved");
         assert_eq!(parse_saved(&good.to_json().unwrap()).unwrap().name, "saved");
 
-        // Anything that would be refused from the socket is refused from disk too — the file is
-        // root-owned, but a bug that writes a bad one must not become a bug that runs it.
+        // Anything refused from the socket is refused from disk too: a bug that writes a bad file
+        // must not become a bug that runs it.
         assert!(parse_saved(r#"{"name":"../escape"}"#).is_err());
         assert!(parse_saved("not json").is_err());
         assert!(parse_saved(

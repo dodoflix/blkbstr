@@ -1,8 +1,5 @@
-//! `blkbstrd` — the privileged half of Blockbuster.
-//!
-//! Runs as a service (root / SYSTEM), owns the zapret2 engine process and the firewall rules, and
-//! exposes exactly four operations over a local socket. The GUI stays unprivileged and can do
-//! nothing to the network stack except through this protocol.
+//! `blkbstrd`: the privileged half of Blockbuster. Runs as a service (root or SYSTEM), owns the
+//! engine process and the firewall rules, and exposes four operations over a local socket.
 
 mod engine;
 mod firewall;
@@ -23,8 +20,7 @@ use std::sync::{Arc, Mutex};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// How often the monitor checks on the engine. A crash is noticed within this, which is far below
-/// what a user would perceive and far above what would make the poll itself cost anything.
+/// How often the monitor checks on the engine.
 const MONITOR_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
 
 fn main() -> Result<()> {
@@ -34,8 +30,7 @@ fn main() -> Result<()> {
     let listener = bind(&args)?;
     tracing::info!(version = VERSION, socket = %paths::socket_name(), "blkbstrd listening");
 
-    // One engine, one lock. Every request that touches the network stack serialises through it,
-    // which is what stops two clients from applying different configs at the same time.
+    // One engine, one lock: requests that touch the network stack serialise through it.
     let engine = Arc::new(Mutex::new(open_engine()));
 
     if let Ok(engine) = engine.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
@@ -49,8 +44,7 @@ fn main() -> Result<()> {
         match conn {
             Ok(conn) => {
                 let engine = Arc::clone(&engine);
-                // ponytail: thread per connection. Clients are one GUI plus a CLI at most;
-                // swap for a poll loop only if that stops being true.
+                // Thread per connection: clients are one GUI plus a CLI at most.
                 std::thread::spawn(move || {
                     if let Err(e) = serve(conn, &engine) {
                         tracing::warn!(error = %e, "connection ended");
@@ -63,10 +57,9 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Takes the engine and the firewall rules down before the process exits. The engine is a child,
-/// not a member of our process group, so a daemon killed without this leaves it running with
-/// NFQUEUE still bound, and every later start dies with
-/// `nfq_create_queue(): Operation not permitted`.
+/// Takes the engine and rules down before the process exits. The engine is a child outside our
+/// process group, so a daemon killed without this leaves NFQUEUE bound and every later start dies
+/// with `nfq_create_queue(): Operation not permitted`.
 #[cfg(unix)]
 fn spawn_shutdown(engine: Arc<Mutex<Result<Engine, String>>>) -> Result<()> {
     use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
@@ -87,8 +80,7 @@ fn spawn_shutdown(engine: Arc<Mutex<Result<Engine, String>>>) -> Result<()> {
     Ok(())
 }
 
-/// Watches for an engine that exited by itself, and restarts it. Runs on a timer rather than
-/// blocking on the child, so the lock is held only for the instant the check takes.
+/// Restarts an engine that exited by itself. Runs on a timer so the lock is held only briefly.
 fn spawn_monitor(engine: Arc<Mutex<Result<Engine, String>>>) {
     std::thread::spawn(move || loop {
         std::thread::sleep(MONITOR_INTERVAL);
@@ -98,8 +90,8 @@ fn spawn_monitor(engine: Arc<Mutex<Result<Engine, String>>>) {
     });
 }
 
-/// A missing engine binary is reported per request rather than at startup: the daemon still has to
-/// answer `ping` and `status` so the GUI can say what is wrong instead of showing nothing.
+/// A missing engine binary is reported per request, not at startup, so `ping` and `status` still
+/// answer and the GUI can say what is wrong.
 fn open_engine() -> Result<Engine, String> {
     let Some(platform) = Platform::current() else {
         return Err("this platform has no zapret2 engine".into());
@@ -111,8 +103,7 @@ fn open_engine() -> Result<Engine, String> {
 }
 
 struct Args {
-    /// Group id to hand the socket to, so an unprivileged GUI in that group can talk to us.
-    /// Without it the socket stays root-only and the GUI cannot connect.
+    /// Group id to hand the socket to; without it the socket is root-only and the GUI cannot connect.
     socket_group_gid: Option<u32>,
 }
 
@@ -199,8 +190,8 @@ fn bind(args: &Args) -> Result<interprocess::local_socket::Listener> {
     #[cfg(unix)]
     set_socket_access(&name, args.socket_group_gid)?;
     #[cfg(not(unix))]
-    // ponytail: Windows pipe ACLs unimplemented, so the pipe is default-permissive.
-    // Must be restricted to the installing user's group before any Windows release.
+    // Windows pipe ACLs are not implemented: the pipe is default-permissive and must be restricted
+    // to the installing user's group before any Windows release.
     let _ = args;
 
     Ok(listener)
@@ -315,8 +306,7 @@ fn engine_failed(e: anyhow::Error) -> Response {
 }
 
 /// An LSM denial reaches us as a plain "Operation not permitted" from `nft` or the engine, which
-/// reads as nonsense in a process already running as root and sends people looking at file modes.
-/// Names the things that can actually refuse it.
+/// looks like nonsense for a root process. Names what can actually refuse it.
 fn denial_hint(message: &str) -> Option<&'static str> {
     if !cfg!(target_os = "linux") {
         return None;
@@ -326,7 +316,7 @@ fn denial_hint(message: &str) -> Option<&'static str> {
         .any(|s| message.contains(s))
         .then_some(
             " (running as root, so this was refused by AppArmor, SELinux or the capability \
-             bounding set rather than by file permissions — `journalctl -k -g 'apparmor|avc'` \
+             bounding set rather than by file permissions - `journalctl -k -g 'apparmor|avc'` \
              names the rule; see packaging/linux/README.md)",
         )
 }
@@ -336,8 +326,8 @@ mod tests {
     use super::*;
     use blkbstr_core::Config;
 
-    /// The engine is deliberately absent: these cover the paths that must answer sensibly on a
-    /// machine where zapret2 is not installed, which is every machine before onboarding runs.
+    /// Covers the paths that must answer sensibly on a machine without zapret2, which is every
+    /// machine before onboarding.
     fn no_engine() -> Mutex<Result<Engine, String>> {
         Mutex::new(Err("nfqws2 not found".into()))
     }

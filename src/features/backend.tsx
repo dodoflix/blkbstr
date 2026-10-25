@@ -8,8 +8,7 @@ export type Backend = {
   service?: api.ServiceStatus;
   env?: api.Environment;
   configs: string[];
-  /** True once daemon, engine status and saved configs have all answered, so screens never flash a
-   *  guess ("off", "unreachable", "no configs") and then correct it. */
+  /** True once daemon, engine status and configs have all answered, so screens never flash a guess. */
   ready: boolean;
   refresh: () => Promise<void>;
   refreshEnv: () => Promise<void>;
@@ -31,8 +30,7 @@ export const useBackend = () => {
   return ctx;
 };
 
-/** One place that owns daemon, engine, service and environment state, so screens read it instead of
- *  each polling the daemon on their own. */
+/** Owns daemon, engine, service and environment state so screens do not each poll the daemon. */
 export function BackendProvider({ children }: { children: ReactNode }) {
   const toast = useToast();
   const [daemon, setDaemon] = useState<api.DaemonInfo>();

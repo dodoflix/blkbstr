@@ -1,18 +1,10 @@
-//! Renders a [`Config`] into nfqws2 options.
-//!
-//! Output is a parameter file for nfqws2's `@<config_file>` option — one option per line, read as
-//! if typed on the command line. A file rather than argv because a multi-profile config runs to
-//! dozens of options, and because a file can be shown to the user, diffed and attached to a bug
-//! report.
-//!
-//! Rendering is pure: no filesystem, no process. That keeps it testable and lets the GUI preview
-//! exactly what the daemon will run.
+//! Renders a [`Config`] into the parameter file passed to nfqws2 as `@<file>`, one option per line.
+//! Pure (no filesystem, no process), so the GUI can preview exactly what the daemon runs.
 
 use crate::config::{Action, Config, Filter, Strategy};
 use crate::registry::Platform;
 
-/// Options every instance gets, independent of the config. Interception is the only part that
-/// differs per platform.
+/// Options every instance gets, independent of the config.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineOptions {
     pub platform: Platform,
@@ -22,12 +14,10 @@ pub struct EngineOptions {
     pub pidfile: String,
     /// `--debug=@<path>`; the file the GUI's log viewer tails.
     pub debug_log: Option<String>,
-    /// zapret2's Lua library, in load order. Every desync function lives there — with none of
-    /// these the engine starts and then dies on the first action with
+    /// zapret2's Lua library, in load order. Without it the engine dies on the first action with
     /// `desync function 'multisplit' does not exist`.
     pub lua_init: Vec<String>,
-    /// Render for validation instead of a real run: `--intercept=0` makes the engine load the Lua,
-    /// resolve every action and exit without opening NFQUEUE.
+    /// Render for validation: `--intercept=0` loads the Lua and resolves every action, then exits.
     pub validate: bool,
 }
 
@@ -53,8 +43,7 @@ pub fn parameter_file(config: &Config, engine: &EngineOptions) -> String {
     }
     match engine.platform {
         Platform::Linux => lines.push(format!("--qnum={}", engine.queue_num)),
-        // winws2 builds its own WinDivert filter from the profile filters; dvtws2 takes a divert
-        // port, which the daemon owns rather than the config.
+        // winws2 builds its own WinDivert filter; dvtws2 takes a divert port the daemon owns.
         Platform::Windows | Platform::Bsd => {}
     }
     if !engine.pidfile.is_empty() {
@@ -67,9 +56,8 @@ pub fn parameter_file(config: &Config, engine: &EngineOptions) -> String {
         lines.push(format!("--lua-init=@{script}"));
     }
 
-    // nfqws2 has profile 1 open before it reads anything, so `--new` for the first strategy leaves
-    // that one empty — and an empty profile has no filters, matches every packet first, and passes
-    // it through: "desync profile 1 (noname) matches / no lua functions in this profile".
+    // nfqws2 has profile 1 open already, so `--new` for the first strategy would leave it empty,
+    // and an empty profile matches every packet and passes it through untouched.
     for (n, strategy) in config.strategies.iter().filter(|s| s.enabled).enumerate() {
         lines.push(String::new());
         let flag = if n == 0 { "--name" } else { "--new" };
@@ -113,8 +101,7 @@ fn action_lines(action: &Action) -> Vec<String> {
         lines.push(format!("--payload={}", action.payload.join(",")));
     }
 
-    // `--lua-desync=fn:key=value:bare_flag`. An empty value is a bare flag, which is how the
-    // manual documents `badsum` in `fake:blob=...:badsum`.
+    // `--lua-desync=fn:key=value:bare_flag`; an empty value is a bare flag, e.g. `badsum`.
     let mut call = format!("--lua-desync={}", action.function);
     for (key, value) in &action.args {
         if value.is_empty() {
@@ -127,19 +114,14 @@ fn action_lines(action: &Action) -> Vec<String> {
     lines
 }
 
-/// Arguments for any invocation. `@<file>` has to be the only argument — nfqws2 documents it as
-/// "must be the only argument. other options are ignored", and it means it: a `--dry-run` appended
-/// after it is silently dropped and the engine starts for real. Anything that would be a flag goes
-/// inside the file, which is what [`EngineOptions::validate`] is for.
-///
-/// `--daemon` is deliberately absent: the daemon supervises the engine as a child process, and a
-/// process that forks away from us cannot be supervised.
+/// Arguments for any invocation. `@<file>` must be the only argument: nfqws2 silently ignores
+/// anything after it, so flags go inside the file. `--daemon` is absent because the daemon
+/// supervises the engine as a child, and a forked process cannot be supervised.
 pub fn run_args(parameter_file_path: &str) -> Vec<String> {
     vec![format!("@{parameter_file_path}")]
 }
 
-/// A minimal working starting point, used by the first-run wizard and as the seed for
-/// auto-configuration. TLS on 443 with a fake ClientHello, falling back to `multidisorder`.
+/// A minimal working config: TLS on 443 with a fake ClientHello, falling back to `multidisorder`.
 pub fn starter_config(name: &str) -> Config {
     let mut config = Config::new(name);
     let mut https = Strategy::new("https");
@@ -152,7 +134,7 @@ pub fn starter_config(name: &str) -> Config {
         Action::new("fake")
             .with("blob", "fake_default_tls")
             .with("badsum", ""),
-        // `pos` is not optional in practice: without it multidisorder splits after one byte.
+        // Without `pos`, multidisorder splits after one byte.
         Action::new("multidisorder").with("pos", "1,midsld"),
     ];
     for action in &mut https.actions {
@@ -199,8 +181,7 @@ mod tests {
         );
     }
 
-    /// nfqws2 ignores anything after `@<file>`, so a validation run that put `--intercept=0` in
-    /// argv would start the engine for real instead of checking it.
+    /// nfqws2 ignores anything after `@<file>`, so `--intercept=0` in argv would start it for real.
     #[test]
     fn validation_goes_in_the_file_not_in_argv() {
         let out = parameter_file(
@@ -274,8 +255,7 @@ mod tests {
 
     #[test]
     fn every_rendered_line_is_a_single_option() {
-        // The whole point of validate()'s newline check: one line, one option. If this ever fails
-        // for a config that passed validation, a value is smuggling extra options in.
+        // One line, one option; a failure here means a value is smuggling extra options in.
         let config = starter_config("t");
         config.validate().unwrap();
         for line in parameter_file(&config, &engine()).lines() {

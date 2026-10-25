@@ -1,8 +1,5 @@
-//! GUI ↔ daemon wire protocol: newline-delimited JSON over a local socket.
-//!
-//! Deliberately request/response only. Logs are *not* streamed over this socket — the daemon
-//! writes files under [`crate::paths::log_dir`] and the GUI tails them directly, which keeps the
-//! privileged surface to "start, stop, report status".
+//! GUI and daemon wire protocol: newline-delimited JSON over a local socket. Request and response
+//! only; logs are not streamed, the GUI reads the files under [`crate::paths::log_dir`].
 
 use crate::config::Config;
 use serde::{Deserialize, Serialize};
@@ -14,19 +11,18 @@ pub const PROTOCOL_VERSION: u32 = 2;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Request {
-    /// Liveness check. Also how the GUI learns whether the daemon is installed and running.
-    Ping { protocol: u32 },
-    /// Current engine state.
+    /// Liveness check; also how the GUI learns whether the daemon is installed.
+    Ping {
+        protocol: u32,
+    },
     Status,
-    /// Apply a config and start the engine. `ephemeral` runs it without persisting it as the
-    /// active config, so a failed experiment is undone by a restart ("try it" mode).
+    /// Apply a config and start the engine. `ephemeral` makes it a trial that is not persisted.
     Start {
         config: Box<Config>,
         #[serde(default)]
         ephemeral: bool,
     },
-    /// Keep a trial run: cancels its automatic revert and persists it as the config to bring back
-    /// at boot. Nothing else can stop a trial from being undone.
+    /// Keep a trial run: cancels the automatic revert and persists the config for boot.
     Confirm,
     /// Stop the engine, leaving the firewall in its pre-start state.
     Stop,
@@ -54,21 +50,19 @@ pub enum ErrorCode {
     ProtocolMismatch,
     /// Malformed request or invalid config.
     BadRequest,
-    /// The engine itself failed (missing binary, firewall rejected the rules, …).
+    /// The engine itself failed (missing binary, firewall rejected the rules, ...).
     EngineFailed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct EngineStatus {
     pub running: bool,
-    /// Name of the config currently applied, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_config: Option<String>,
     /// True when the active config was started with `ephemeral` and will not survive a restart.
     #[serde(default)]
     pub ephemeral: bool,
-    /// Seconds until an unconfirmed trial run is undone. `None` once confirmed, or when the run
-    /// was never a trial.
+    /// Seconds until an unconfirmed trial run is undone; `None` once kept or when not a trial.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revert_in_seconds: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -79,8 +73,7 @@ pub struct EngineStatus {
     /// Version reported by the zapret2 engine binary, when it could be determined.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub engine_version: Option<String>,
-    /// Why the engine is not running, when it stopped by itself. Survives the process it describes
-    /// so the GUI can explain a crash the user was not watching for.
+    /// Why the engine stopped by itself. Outlives the process so the GUI can explain a crash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_error: Option<String>,
 }

@@ -5,8 +5,8 @@ polkit action, creates the `blkbstr` group and adds the invoking user to it. `un
 all of it except the group, which it keeps so that reinstalling does not hand out a new GID and cost
 the user another logout; `groupdel blkbstr` finishes the job.
 
-Group membership only reaches a session at login. A new terminal is not a new login — it inherits
-the groups of whatever started it — so the first run after installing needs a full logout, or a
+Group membership only reaches a session at login. A new terminal is not a new login - it inherits
+the groups of whatever started it - so the first run after installing needs a full logout, or a
 shell started with `newgrp blkbstr`.
 
 ## Confinement
@@ -16,7 +16,7 @@ The daemon runs unconfined by default. Both profiles below are optional, and nei
 machine, not for an installer.
 
 Their value is not only containment. On a system where an LSM is already enforcing, a daemon with
-no profile can be refused netlink and report it as `Operation not permitted` — from a process
+no profile can be refused netlink and report it as `Operation not permitted` - from a process
 running as root, which sends people looking at file modes. The daemon appends a note to any such
 error saying what could actually have refused it.
 
@@ -28,7 +28,7 @@ sudo apparmor_parser -r -W /etc/apparmor.d/usr.local.libexec.blkbstrd
 sudo systemctl restart blkbstrd
 ```
 
-Remove it with `apparmor_parser -R`, then delete the file — a profile left in `/etc/apparmor.d` is
+Remove it with `apparmor_parser -R`, then delete the file - a profile left in `/etc/apparmor.d` is
 loaded again at boot.
 
 `nft` and `ip` run inside the profile; the engine runs under its own profile if the distribution

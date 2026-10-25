@@ -1,12 +1,6 @@
-//! Controlling the daemon's service unit from the GUI.
-//!
-//! Shells out to `systemctl` rather than speaking to systemd over D-Bus. Run unprivileged,
-//! `systemctl` already goes through D-Bus and raises a polkit prompt for the operations that need
-//! authorisation, which is exactly the behaviour we want and none of the code.
-//!
-//! It needs a polkit agent in the session. Every mainstream desktop runs one; a bare window
-//! manager may not, and there the prompt never appears and the call fails with an authorisation
-//! error rather than hanging.
+//! Controls the daemon's service unit by shelling out to `systemctl`, which raises a polkit prompt
+//! for operations that need authorisation. Without a polkit agent in the session the call fails
+//! with an authorisation error instead of hanging.
 
 use serde::Serialize;
 use std::process::Command;
@@ -15,7 +9,7 @@ const UNIT: &str = "blkbstrd.service";
 
 #[derive(Serialize, Default)]
 pub struct ServiceStatus {
-    /// False when the unit file is not installed at all — the first-run state.
+    /// False when the unit file is not installed at all - the first-run state.
     pub installed: bool,
     /// Starts at boot.
     pub enabled: bool,

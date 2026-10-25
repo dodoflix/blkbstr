@@ -11,7 +11,7 @@ that file is the authority, this page is the explanation.
 | Windows | Named pipe `blkbstrd.sock` |
 
 One request and one response per connection; the GUI opens a new connection each time. Both sides
-flush after writing — a half-written line with both ends waiting is a deadlock, not an error.
+flush after writing - a half-written line with both ends waiting is a deadlock, not an error.
 
 Access to the socket is the entire authorisation model, so its permissions are load-bearing: the
 daemon sets `0660` immediately after binding and hands it to the group given by
@@ -19,7 +19,7 @@ daemon sets `0660` immediately after binding and hands it to the group given by
 GUI that cannot connect rather than a socket anyone can drive.
 
 > Windows named-pipe ACLs are not implemented yet. The pipe must be restricted to the installing
-> user's group before any Windows release — see `bind()` in `crates/blkbstr-daemon/src/main.rs`.
+> user's group before any Windows release - see `bind()` in `crates/blkbstr-daemon/src/main.rs`.
 
 ## Versioning
 
@@ -32,21 +32,21 @@ failing in an interesting way three requests later.
 | Request | Fields | Effect |
 | --- | --- | --- |
 | `ping` | `protocol` | Liveness plus version handshake. Also how the GUI learns the service is installed at all |
-| `status` | — | Current engine state |
+| `status` | - | Current engine state |
 | `start` | `config`, `ephemeral` | Apply a config and start the engine |
-| `confirm` | — | Keep a trial run: cancels its revert and records it as active |
-| `stop` | — | Stop the engine and restore the firewall |
+| `confirm` | - | Keep a trial run: cancels its revert and records it as active |
+| `stop` | - | Stop the engine and restore the firewall |
 
 `ephemeral: true` runs the config without recording it as active, so a failed experiment is undone
 by a restart. It also arms a deadline: unless a `confirm` arrives within two minutes, the daemon
 stops the engine and removes the rules by itself, and `status` reports why.
 
 That deadline lives in the daemon rather than the GUI on purpose. The case it exists for is the
-one where the GUI cannot help — a strategy that takes the network down with it, or a client that
+one where the GUI cannot help - a strategy that takes the network down with it, or a client that
 died with the rules still up. A timer in the process that owns the firewall is the only one that
 still runs then. `BLKBSTR_REVERT_SECONDS` shortens it for testing.
 
-`status` never fails. A daemon with no engine — because zapret2 is not installed — still answers,
+`status` never fails. A daemon with no engine - because zapret2 is not installed - still answers,
 with the reason in `last_error`, so the GUI can explain the situation instead of rendering a failed
 request.
 
@@ -69,7 +69,7 @@ request.
 | --- | --- |
 | `protocol_mismatch` | Daemon and GUI disagree on the protocol version |
 | `bad_request` | Malformed request or invalid config |
-| `engine_failed` | The engine itself failed — binary missing, config rejected by `--dry-run`, rules refused |
+| `engine_failed` | The engine itself failed - binary missing, config rejected by `--intercept=0`, rules refused |
 
 ## What is not here
 

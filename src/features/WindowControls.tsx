@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Icon } from "../ui";
 
 export const inTauri = "__TAURI_INTERNALS__" in window;
-/** The developer page embeds the app in iframes; those must not draw their own window controls. */
+/** The developer page embeds the app in iframes, which must not draw window controls. */
 const embedded = window.self !== window.top;
 
 type Edge = Parameters<ReturnType<typeof getCurrentWindow>["startResizeDragging"]>[0];
@@ -26,8 +26,7 @@ function useWindowState() {
   return state;
 }
 
-/** A 1px outline around the whole window, drawn only when it is a floating window. An undecorated
- *  window has no frame of its own, so without this its edges and corners disappear into the desktop. */
+/** A 1px outline around a floating window; an undecorated one has no frame of its own. */
 export function WindowFrame() {
   const { maximized, fullscreen } = useWindowState();
   if (!inTauri || embedded || maximized || fullscreen) return null;
@@ -52,7 +51,7 @@ export function WindowControls() {
           <Icon name="x" size={16} />
         </button>
       </div>
-      {/* An undecorated window has no frame to grab, so the edges are drawn as hit areas. */}
+      {/* Hit areas for resizing, since an undecorated window has no frame to grab. */}
       {!maximized &&
         EDGES.map((edge) => (
           <div key={edge} className="ui-resize" data-edge={edge} onMouseDown={() => void win.startResizeDragging(edge)} />

@@ -1,20 +1,15 @@
-//! Platform-agnostic configuration model.
-//!
-//! A [`Config`] is what the user names, saves, switches between and syncs. It mirrors zapret2's own
-//! vocabulary: a [`Strategy`] is one nfqws2 *profile*, and its [`Action`]s are the ordered
-//! `--lua-desync` calls inside it. It is not a command line — [`crate::render`] turns it into one,
-//! and [`crate::registry`] reports what this build does not recognise.
+//! Platform-agnostic configuration model. A [`Config`] is what the user names, saves and shares;
+//! [`crate::render`] turns it into nfqws2 options and [`crate::registry`] reports what this build
+//! does not recognise.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// Bumped whenever a config file needs migration. Files carrying a higher number are rejected
-/// rather than silently misread.
+/// Bumped whenever a config file needs migration. Higher numbers are rejected, not misread.
 pub const SCHEMA_VERSION: u32 = 1;
 
-/// The `NFQWS2_COMPAT_VER` this build renders for. Upstream bumps it on every API break — v2
-/// replaced the `stun_binding_req` payload, v3 restructured `desync.track` — so a config records
-/// which one its actions were written against.
+/// The `NFQWS2_COMPAT_VER` this build renders for. Upstream bumps it on every API break, so a
+/// config records which one its actions were written against.
 pub const NFQWS2_COMPAT_VER: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,14 +34,13 @@ pub struct Strategy {
     pub enabled: bool,
     #[serde(default)]
     pub filter: Filter,
-    /// Ordered. nfqws2 runs them in sequence, and orchestrators like `circular` depend on that
-    /// order, so this is a list rather than a map.
+    /// Ordered: nfqws2 runs them in sequence and `circular` depends on it.
     #[serde(default)]
     pub actions: Vec<Action>,
 }
 
-/// Profile-level filters — the `--filter-*`, `--hostlist*` and `--ipset*` options. Traffic that
-/// does not match never reaches the profile's actions.
+/// Profile-level filters (`--filter-*`, `--hostlist*`, `--ipset*`); traffic that does not match
+/// never reaches the profile's actions.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Filter {
     /// `ipv4` or `ipv6`; unset means both.
@@ -76,7 +70,7 @@ pub struct Filter {
 /// One `--lua-desync` call: a function from zapret2's Lua libraries plus its arguments.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Action {
-    /// Lua function name — `fake`, `multisplit`, `multidisorder`, `wsize`, `circular`, …
+    /// Lua function name: `fake`, `multisplit`, `circular`, ...
     pub function: String,
     /// `--payload=` filter applied to this action. Empty means whatever the profile already set.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -142,8 +136,7 @@ impl Config {
         Ok(())
     }
 
-    /// Separate from [`Self::validate`] because a compat mismatch is a warning the user may
-    /// choose to override, not a malformed file.
+    /// Separate from [`Self::validate`]: a compat mismatch is a warning the user may override.
     pub fn compat_check(&self) -> Result<(), ConfigError> {
         if self.compat == NFQWS2_COMPAT_VER {
             Ok(())
@@ -220,8 +213,7 @@ impl Action {
         }
         for (key, value) in &self.args {
             check_token("action argument", key)?;
-            // `:` separates arguments inside --lua-desync, so a value containing one would be
-            // read as an extra argument.
+            // `:` separates arguments inside --lua-desync.
             if value.contains(':') {
                 return Err(ConfigError::UnsafeValue {
                     field: "action argument value",
@@ -250,9 +242,8 @@ fn check_token(field: &'static str, value: &str) -> Result<(), ConfigError> {
     }
 }
 
-/// nfqws2 reads its options from a file, one per line, so any newline in a user-supplied value
-/// injects an arbitrary option into a process that manipulates the firewall. Configs arrive by
-/// sync and by import, so they are untrusted input.
+/// nfqws2 reads options from a file, one per line, so a newline in a user-supplied value injects
+/// an option into a firewall-managing process. Configs arrive by import and sync: untrusted.
 fn check_value(field: &'static str, value: &str) -> Result<(), ConfigError> {
     if value.contains(['\n', '\r', '\0']) {
         Err(ConfigError::UnsafeValue {

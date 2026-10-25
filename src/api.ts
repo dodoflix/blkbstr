@@ -21,7 +21,6 @@ export type Filter = {
   ipset_exclude?: string;
 };
 
-/** One nfqws2 profile. */
 export type Strategy = {
   name: string;
   enabled: boolean;
@@ -79,7 +78,6 @@ export type Environment = {
   existing_install?: string;
 };
 
-/** Local probes only; no daemon needed, which is the point during onboarding. */
 export const detectEnvironment = () =>
   invoke<Environment>("detect_environment");
 
@@ -100,14 +98,14 @@ export type SiteResult = {
 };
 
 export type Report = {
-  /** False when even the control host failed: the network is down, so no other verdict means anything. */
+  /** False when even the control host failed: the network is down, so no verdict means anything. */
   network_ok: boolean;
   control: SiteResult;
   sites: SiteResult[];
 };
 
-/** Seconds, not milliseconds — an unreachable host costs a full timeout. Omit `hosts` for the
- *  built-in list. Nothing is uploaded and the list never leaves the machine. */
+/** Timeout in ms; an unreachable host costs a full one. Omit `hosts` for the built-in list. Nothing
+ *  is uploaded. */
 export const checkReachability = (hosts?: string[], timeoutMs?: number) =>
   invoke<Report>("check_reachability", { hosts, timeoutMs });
 
@@ -116,8 +114,6 @@ export const PROBED_TCP_PORT = "443";
 /** Per-candidate timeout during the walk; the baseline check uses the daemon's longer default. */
 export const TRIAL_TIMEOUT_MS = 2000;
 
-/** Ordered most to least likely to be enough. The walk is driven from here: start each one as a
- *  trial, re-check, stop it if it did not help. */
 /** A strategy to try, and how much it disturbs traffic. Cost only orders strategies that work. */
 export type Candidate = { config: Config; cost: number };
 
@@ -136,7 +132,7 @@ export type DaemonInfo = {
   problem?: string;
 };
 
-/** A working config to start from — comes from Rust so it stays in step with the renderer. */
+/** A working config to start from; comes from Rust so it stays in step with the renderer. */
 export const starterConfig = (name: string) =>
   invoke<Config>("starter_config", { name });
 
@@ -144,7 +140,6 @@ export const starterConfig = (name: string) =>
 export const previewConfig = (config: Config) =>
   invoke<string>("preview_config", { config });
 
-/** Lua function names this build knows, for a strategy editor. */
 export const knownFunctions = () => invoke<string[]>("known_functions");
 
 export type ServiceStatus = {
@@ -170,7 +165,7 @@ export const readLog = (name: string) => invoke<string>("read_log", { name });
 export const exportDiagnostics = (logsWanted: string[]) =>
   invoke<string>("export_diagnostics", { logsWanted });
 
-/** Resolves even when the daemon is absent — check `reachable`. */
+/** Resolves even when the daemon is absent - check `reachable`. */
 export const daemonInfo = () => invoke<DaemonInfo>("daemon_info");
 
 export const engineStatus = () => invoke<EngineStatus>("engine_status");
