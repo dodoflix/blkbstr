@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   Badge,
   Button,
@@ -30,6 +31,8 @@ import { useBackend } from "./backend";
 import { impactLabel, plainImpact, useAutoConfig, type AutoConfig } from "./autoconfig";
 import { plural } from "./format";
 import { usePrefs } from "./prefs";
+import { HostModePicker } from "./hostmode";
+import { ChooseSites } from "./SiteChoices";
 import { SiteList } from "./SiteList";
 
 const STEPS: (Step & { title: string; lead: string })[] = [
@@ -39,15 +42,20 @@ const STEPS: (Step & { title: string; lead: string })[] = [
   { id: "keep", label: "Keep it", title: "Save and turn on", lead: "Name it, and it comes back after every reboot." },
 ];
 
-/** Sticky so the way forward never scrolls out of view under a long list. */
+/** The footer under the scrolling step body. Steps declare their buttons where they read best and
+ *  the buttons land here, so the way forward is a fixed footer, not part of what scrolls. */
+const ActionsSlot = createContext<HTMLElement | null>(null);
+
 function StepActions({ children }: { children: ReactNode }) {
-  return (
-    <div className="wizard__actions">
-      <Row gap={2} wrap>
-        {children}
-      </Row>
-    </div>
-  );
+  const slot = useContext(ActionsSlot);
+  return slot
+    ? createPortal(
+        <Row gap={2} wrap>
+          {children}
+        </Row>,
+        slot,
+      )
+    : null;
 }
 
 function requirement({ state, title, detail, action }: { state: State; title: string; detail: ReactNode; action?: ReactNode }) {
@@ -246,6 +254,7 @@ function SitesStep({ onNext, onBack }: { onNext: () => void; onBack: () => void 
           <SiteList report={report} />
         </>
       )}
+
       <StepActions>
         <Button variant="soft" tone="neutral" icon="arrow-left" onClick={onBack}>
           Back
@@ -256,6 +265,7 @@ function SitesStep({ onNext, onBack }: { onNext: () => void; onBack: () => void 
         <Button variant="soft" tone="neutral" icon="refresh" loading={checking} onClick={() => void check()}>
           Test again
         </Button>
+        <ChooseSites onChanged={() => void check()} />
       </StepActions>
     </Stack>
   );
@@ -266,22 +276,14 @@ function FixStep({ ac, onNext, onBack }: { ac: AutoConfig; onNext: () => void; o
   const [cur, total] = ac.progress;
   const latest = ac.steps[ac.steps.length - 1];
   const started = ac.running || ac.steps.length > 0 || ac.error || ac.note;
+  // Arriving here is the decision to search; coming back to a finished one keeps its results.
+  useEffect(() => {
+    if (!started) void ac.run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <Stack gap={5}>
-      {!started && (
-        <Stack gap={4}>
-          <Text as="p" color={2}>
-            This takes a few minutes. Your connection may blink while strategies are tried. Nothing is kept until you say so, and it all undoes itself if this window closes.
-          </Text>
-          <Row>
-            <Button size="lg" icon="play" onClick={() => void ac.run()}>
-              Start the search
-            </Button>
-          </Row>
-        </Stack>
-      )}
-
       {ac.running && (
         <Stack gap={3}>
           <Progress
@@ -300,6 +302,9 @@ function FixStep({ ac, onNext, onBack }: { ac: AutoConfig; onNext: () => void; o
               Stop and use what we have
             </Button>
           </Row>
+          <Text size="sm" color={3}>
+            This takes a few minutes and your connection may blink. Nothing is kept until you say so, and it all undoes itself if this window closes.
+          </Text>
           {ac.working.length > 0 && (
             <Text size="sm" color="ok">
               {plural(ac.working.length, "strategy", "strategies")} already got through.
@@ -345,6 +350,7 @@ function FixStep({ ac, onNext, onBack }: { ac: AutoConfig; onNext: () => void; o
 
       {advanced && ac.steps.length > 0 && (
         <Disclosure summary={`All ${ac.steps.length} attempts`}>
+          <div className="wizard__attempts">
           <Table
             caption="Every strategy tried"
             dense
@@ -356,6 +362,7 @@ function FixStep({ ac, onNext, onBack }: { ac: AutoConfig; onNext: () => void; o
               { key: "notes", header: "What it does", cell: (s) => <Text size="sm" color={2}>{s.notes}</Text> },
             ]}
           />
+          </div>
         </Disclosure>
       )}
 
@@ -407,6 +414,9 @@ function KeepStep({ ac, onBack, onDone }: { ac: AutoConfig; onBack: () => void; 
       <Field label="Name" hint="Letters, numbers and dashes. You can run it again from Configs.">
         <TextField className="wizard__name" value={ac.saveAs} onChange={(e) => ac.setSaveAs(e.currentTarget.value)} />
       </Field>
+      <Field label="Which sites" hint="The sites setup found blocked go on the lists you pick, so they work from the start.">
+        <HostModePicker value={ac.mode} onChange={ac.setMode} />
+      </Field>
       <Text size="sm" color={3}>
         Until you save, the trial undoes itself.
       </Text>
@@ -444,6 +454,7 @@ export function SetupWizard({
   initialStep?: string;
 }) {
   const [step, setStep] = useState(initialStep);
+  const [actions, setActions] = useState<HTMLElement | null>(null);
   const ac = useAutoConfig();
   const at = STEPS.find((s) => s.id === step)!;
   const go = (id: string) => setStep(id);
@@ -468,12 +479,15 @@ export function SetupWizard({
             {at.lead}
           </Text>
         </Stack>
+        <ActionsSlot.Provider value={actions}>
         <div className="wizard__body" key={step}>
           {step === "computer" && <ComputerStep onNext={() => go("sites")} />}
           {step === "sites" && <SitesStep onBack={() => go("computer")} onNext={() => go("fix")} />}
           {step === "fix" && <FixStep ac={ac} onBack={() => go("sites")} onNext={() => go("keep")} />}
           {step === "keep" && <KeepStep ac={ac} onBack={() => go("fix")} onDone={onDone} />}
         </div>
+        </ActionsSlot.Provider>
+        <footer className="wizard__actions" ref={setActions} />
       </div>
     </Sheet>
   );

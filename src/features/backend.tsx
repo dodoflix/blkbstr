@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import * as api from "../api";
 import { useAsync, usePoll, useToast } from "../ui";
+import { selectedHosts } from "./sites";
 
 export type Backend = {
   daemon?: api.DaemonInfo;
@@ -62,7 +63,7 @@ export function BackendProvider({ children }: { children: ReactNode }) {
   const check = useCallback(async () => {
     setChecking(true);
     try {
-      setReport(await api.checkReachability());
+      setReport(await api.checkReachability(await selectedHosts()));
     } catch (e) {
       toast({ title: "The site check failed", description: String(e), tone: "danger" });
     } finally {

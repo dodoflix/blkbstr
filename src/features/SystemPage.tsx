@@ -21,7 +21,8 @@ import { useState } from "react";
 import * as api from "../api";
 import { useBackend } from "./backend";
 import { HelperInstall } from "./HelperInstall";
-import { SiteList } from "./SiteList";
+import { ChooseSites } from "./SiteChoices";
+import { SiteList, SiteListPlaceholder } from "./SiteList";
 import { usePrefs } from "./prefs";
 
 const found = (ok: boolean, label: string) => (
@@ -166,12 +167,17 @@ export function SystemPage() {
           title="Site check"
           description="Which sites load right now."
           actions={
-            <Button size="sm" variant="soft" tone="neutral" icon="refresh" loading={checking} onClick={() => void check()}>
-              Check
-            </Button>
+            <>
+              <ChooseSites />
+              <Button size="sm" variant="soft" tone="neutral" icon="refresh" loading={checking} onClick={() => void check()}>
+                Check
+              </Button>
+            </>
           }
         >
-          <Panel maxHeight="18rem">{report ? <SiteList report={report} /> : <Text color={3}>Not checked yet.</Text>}</Panel>
+          <Panel className="sites-panel">
+            {report ? <SiteList report={report} /> : checking ? <SiteListPlaceholder /> : <Text color={3}>Not checked yet.</Text>}
+          </Panel>
         </Section>
 
         <Updates />

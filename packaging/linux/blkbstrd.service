@@ -16,8 +16,10 @@ RuntimeDirectory=blkbstr
 RuntimeDirectoryMode=0755
 LogsDirectory=blkbstr
 # Holds the config to bring back up on boot; must survive a reboot, unlike RuntimeDirectory.
+# 0711: the engine drops root and still has to reach autohostlist.txt in here, so the directory is
+# traversable and the config the daemon restores at boot is written 0600.
 StateDirectory=blkbstr
-StateDirectoryMode=0700
+StateDirectoryMode=0711
 
 # The daemon manipulates the firewall and packet queues; it needs those capabilities and nothing
 # else. Drop the rest so a compromised helper is not a general-purpose root shell.

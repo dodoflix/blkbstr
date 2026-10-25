@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::io::{BufRead, Write};
 
 /// Every request carries this; the daemon refuses mismatched majors rather than guessing.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
@@ -26,6 +26,32 @@ pub enum Request {
     Confirm,
     /// Stop the engine, leaving the firewall in its pre-start state.
     Stop,
+    /// A host list and, for the learned one, how the periodic re-check is going.
+    Hosts {
+        list: HostList,
+    },
+    /// Adds hosts to a list. Anything that is not a plain hostname is ignored.
+    HostsAdd {
+        list: HostList,
+        hosts: Vec<String>,
+    },
+    /// Takes hosts off a list. The engine may learn one of them again if it still fails.
+    HostsRemove {
+        list: HostList,
+        hosts: Vec<String>,
+    },
+    /// Re-checks the learned list now instead of waiting for the next scheduled run.
+    HostsCheck,
+}
+
+/// The two lists the daemon keeps for the engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HostList {
+    /// Hosts the engine saw fail and added itself (`--hostlist-auto`).
+    Auto,
+    /// Hosts the user chose (`--hostlist`).
+    Manual,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -36,6 +62,7 @@ pub enum Response {
         protocol: u32,
     },
     Status(EngineStatus),
+    Hosts(HostsStatus),
     Ok,
     Error {
         code: ErrorCode,
@@ -76,6 +103,29 @@ pub struct EngineStatus {
     /// Why the engine stopped by itself. Outlives the process so the GUI can explain a crash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_error: Option<String>,
+}
+
+/// A host list: sites the engine applies strategies to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HostsStatus {
+    pub list: HostList,
+    /// True when the running config uses the list.
+    pub enabled: bool,
+    pub hosts: Vec<String>,
+    /// Whether this platform can re-check the learned list without disturbing traffic: the probes
+    /// are marked (Linux) or carry a TTL (Windows) that keeps them out of the engine.
+    pub can_recheck: bool,
+    /// A re-check is in progress. Only the learned list is re-checked.
+    pub checking: bool,
+    /// Unix epoch seconds the last re-check finished.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_check: Option<u64>,
+    /// Hosts the last re-check found reachable without a strategy and dropped.
+    #[serde(default)]
+    pub last_dropped: Vec<String>,
+    /// Unix epoch seconds the next scheduled re-check runs; absent while the list is not in use.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_check: Option<u64>,
 }
 
 /// Writes one framed message. Both sides must flush before waiting for a reply or they deadlock.

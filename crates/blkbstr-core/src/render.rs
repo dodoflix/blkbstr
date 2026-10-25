@@ -19,6 +19,11 @@ pub struct EngineOptions {
     pub lua_init: Vec<String>,
     /// Render for validation: `--intercept=0` loads the Lua and resolves every action, then exits.
     pub validate: bool,
+    /// The learned-hosts file for `--hostlist-auto`. Chosen by the daemon, never by a config: the
+    /// engine appends to it, and a config is untrusted input.
+    pub auto_hostlist: Option<String>,
+    /// The user's own list for `--hostlist`; the daemon's choice too.
+    pub manual_hostlist: Option<String>,
 }
 
 impl EngineOptions {
@@ -30,13 +35,33 @@ impl EngineOptions {
             debug_log: None,
             lua_init: Vec::new(),
             validate: false,
+            auto_hostlist: None,
+            manual_hostlist: None,
         }
     }
 }
 
+/// The IP TTL the daemon's probes carry on Windows, which has no per-socket firewall mark. The
+/// filter below keeps outgoing packets with this TTL out of the engine, so only a probe skips it.
+/// Windows defaults to 128, so 127 is one nobody picks; a stray connection that does carry it
+/// merely goes unprotected.
+pub const PROBE_TTL: u8 = 127;
+
+/// With the list file empty nfqws2 treats the profile as unfiltered and applies it to every host,
+/// the opposite of "only my list". A domain that cannot exist keeps the list from ever being empty.
+const LIST_SENTINEL: &str = "blkbstr.invalid";
+
 /// Renders the parameter file passed to the engine as `@<file>`.
 pub fn parameter_file(config: &Config, engine: &EngineOptions) -> String {
     let mut lines: Vec<String> = Vec::new();
+    let auto = engine
+        .auto_hostlist
+        .as_deref()
+        .filter(|_| config.uses_auto_hostlist());
+    let manual = engine
+        .manual_hostlist
+        .as_deref()
+        .filter(|_| config.uses_manual_hostlist());
 
     if engine.validate {
         lines.push("--intercept=0".into());
@@ -53,6 +78,20 @@ pub fn parameter_file(config: &Config, engine: &EngineOptions) -> String {
             }
             if !udp.is_empty() {
                 lines.push(format!("--wf-udp-out={udp}"));
+            }
+            // The failure detector reads what comes back (resets, retransmissions, redirects).
+            if auto.is_some() {
+                if !tcp.is_empty() {
+                    lines.push(format!("--wf-tcp-in={tcp}"));
+                }
+                if !udp.is_empty() {
+                    lines.push(format!("--wf-udp-in={udp}"));
+                }
+                // ANDed onto the generated filter. `ip` and `ipv6` guard each comparison because a
+                // field the packet does not have must not read as "not 127".
+                lines.push(format!(
+                    "--wf-raw-filter=inbound or (ip and ip.TTL != {PROBE_TTL}) or (ipv6 and ipv6.HopLimit != {PROBE_TTL})"
+                ));
             }
         }
         Platform::Bsd => {}
@@ -74,6 +113,15 @@ pub fn parameter_file(config: &Config, engine: &EngineOptions) -> String {
         let flag = if n == 0 { "--name" } else { "--new" };
         lines.push(format!("{flag}={}", strategy.name));
         lines.extend(filter_lines(&strategy.filter));
+        if strategy.takes_hostlists() {
+            if let Some(path) = manual {
+                lines.push(format!("--hostlist={path}"));
+                lines.push(format!("--hostlist-domains={LIST_SENTINEL}"));
+            }
+            if let Some(path) = auto {
+                lines.push(format!("--hostlist-auto={path}"));
+            }
+        }
         for action in &strategy.actions {
             lines.extend(action_lines(action));
         }
@@ -193,6 +241,8 @@ mod tests {
             debug_log: Some("/var/log/blkbstr/engine.log".into()),
             lua_init: vec!["/opt/zapret2/lua/zapret-lib.lua".into()],
             validate: false,
+            auto_hostlist: None,
+            manual_hostlist: None,
         }
     }
 
@@ -293,6 +343,89 @@ mod tests {
 
         let linux = parameter_file(&config, &engine());
         assert!(!linux.contains("--wf-"), "{linux}");
+    }
+
+    #[test]
+    fn the_learned_list_goes_on_strategies_without_a_list_of_their_own() {
+        let options = EngineOptions {
+            auto_hostlist: Some("/var/lib/blkbstr/autohostlist.txt".into()),
+            ..engine()
+        };
+        let mut config = starter_config("t");
+        let mut listed = Strategy::new("listed");
+        listed.filter.hostlist = Some("/etc/blkbstr/blocked.txt".into());
+        config.strategies.push(listed);
+
+        let out = parameter_file(&config, &options);
+        assert_eq!(out.matches("--hostlist-auto=").count(), 1, "{out}");
+        let (first, second) = out.split_once("--new=listed").unwrap();
+        assert!(first.contains("--hostlist-auto=/var/lib/blkbstr/autohostlist.txt"));
+        assert!(!second.contains("--hostlist-auto"));
+
+        config.auto_hostlist = false;
+        assert!(!parameter_file(&config, &options).contains("--hostlist-auto"));
+        // No file chosen by the daemon, no list: a config cannot ask for one.
+        config.auto_hostlist = true;
+        assert!(!parameter_file(&config, &engine()).contains("--hostlist-auto"));
+    }
+
+    #[test]
+    fn the_own_list_is_never_empty_to_the_engine() {
+        let options = EngineOptions {
+            manual_hostlist: Some("/var/lib/blkbstr/hostlist.txt".into()),
+            ..engine()
+        };
+        let mut config = starter_config("t");
+        // Off by default: nothing is rendered until the config asks for it.
+        assert!(!parameter_file(&config, &options).contains("--hostlist"));
+
+        config.manual_hostlist = true;
+        let out = parameter_file(&config, &options);
+        assert!(
+            out.contains("--hostlist=/var/lib/blkbstr/hostlist.txt\n"),
+            "{out}"
+        );
+        assert!(
+            out.contains("--hostlist-domains=blkbstr.invalid\n"),
+            "{out}"
+        );
+        assert!(!out.contains("--hostlist-auto"), "{out}");
+
+        // Both lists: a host on either one gets the strategy.
+        config.auto_hostlist = true;
+        let both = EngineOptions {
+            auto_hostlist: Some("/var/lib/blkbstr/autohostlist.txt".into()),
+            ..options
+        };
+        let out = parameter_file(&config, &both);
+        assert!(
+            out.contains("--hostlist=") && out.contains("--hostlist-auto="),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn windows_reads_incoming_traffic_only_when_the_learned_list_needs_it() {
+        let windows = |auto: Option<&str>| EngineOptions {
+            platform: Platform::Windows,
+            auto_hostlist: auto.map(str::to_owned),
+            ..engine()
+        };
+        let config = starter_config("t");
+        let with = parameter_file(&config, &windows(Some("C:/a.txt")));
+        assert!(with.contains("--wf-tcp-in=443\n"), "{with}");
+        // The daemon's probes carry this TTL; the engine must not capture them going out.
+        assert!(
+            with.contains("ip.TTL != 127") && with.contains("ipv6.HopLimit != 127"),
+            "{with}"
+        );
+        assert!(with.contains("--wf-raw-filter=inbound or"), "{with}");
+        let without = parameter_file(&config, &windows(None));
+        assert!(
+            !without.contains("--wf-tcp-in") && !without.contains("--wf-raw-filter"),
+            "{without}"
+        );
+        assert!(!parameter_file(&config, &engine()).contains("--wf-raw-filter"));
     }
 
     #[test]

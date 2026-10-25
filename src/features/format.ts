@@ -10,6 +10,14 @@ export function uptime(since: number, now = Date.now()): string {
   return `${Math.floor(seconds / 86400)}d`;
 }
 
+/** Time until a Unix-seconds moment, as coarse as `uptime`. */
+export function until(at: number, now = Date.now()): string {
+  const seconds = Math.max(0, at - Math.floor(now / 1000));
+  if (seconds < 60) return "under a minute";
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
+  return `${Math.round(seconds / 3600)}h`;
+}
+
 /** Coarse: the status is polled every few seconds, so a per-second countdown would stutter. */
 export function countdown(seconds: number): string {
   if (seconds >= 60) return `about ${Math.round(seconds / 60)} min`;

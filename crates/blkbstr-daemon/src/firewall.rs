@@ -14,6 +14,16 @@ const TABLE: &str = "blkbstr";
 /// and the machine locks up. Matches nfqws2's `--fwmark` default.
 const FWMARK: &str = "0x40000000";
 
+/// Set on the daemon's own probes (`SO_MARK`) so they skip the queue and reach the network as they
+/// would without a strategy, while the host stays on its list and the user's traffic is untouched.
+/// A separate bit from [`FWMARK`]: that one also means "do not track", and a probe needs tracking
+/// or NAT never matches the reply.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub const PROBE_MARK: u32 = 0x2000_0000;
+
+/// What the outgoing rules test: either bit set means "not for the engine".
+const SKIP_MARKS: &str = "0x60000000";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InterceptSpec {
     /// Interface traffic leaves by; scoping to it keeps loopback and LAN traffic out of userspace.
@@ -64,18 +74,18 @@ pub fn ruleset(spec: &InterceptSpec) -> String {
     ));
     if !udp.is_empty() {
         s.push_str(&format!(
-            "add rule inet {TABLE} postnat oifname \"{wan}\" meta mark and {FWMARK} == 0 \
+            "add rule inet {TABLE} postnat oifname \"{wan}\" meta mark and {SKIP_MARKS} == 0 \
              udp dport {{ {udp} }} ct original packets 1-{out} queue num {q} bypass\n"
         ));
     }
     if !tcp.is_empty() {
         s.push_str(&format!(
-            "add rule inet {TABLE} postnat oifname \"{wan}\" meta mark and {FWMARK} == 0 \
+            "add rule inet {TABLE} postnat oifname \"{wan}\" meta mark and {SKIP_MARKS} == 0 \
              tcp dport {{ {tcp} }} ct original packets 1-{out} queue num {q} bypass\n"
         ));
         // FIN/RST are cheap and let the engine's conntrack retire flows promptly.
         s.push_str(&format!(
-            "add rule inet {TABLE} postnat oifname \"{wan}\" meta mark and {FWMARK} == 0 \
+            "add rule inet {TABLE} postnat oifname \"{wan}\" meta mark and {SKIP_MARKS} == 0 \
              tcp dport {{ {tcp} }} tcp flags fin,rst queue num {q} bypass\n"
         ));
     }
@@ -249,11 +259,28 @@ mod tests {
             .filter(|l| l.contains("postnat") && l.contains("queue num"))
         {
             assert!(
-                line.contains(&format!("meta mark and {FWMARK} == 0")),
+                line.contains(&format!("meta mark and {SKIP_MARKS} == 0")),
                 "outgoing rule without a fwmark guard would loop: {line}"
             );
         }
         assert!(s.contains("notrack"), "engine packets must skip conntrack");
+    }
+
+    #[test]
+    fn probes_skip_the_queue_but_not_conntrack() {
+        // The queue guard covers both marks; `notrack` is only for the engine's own packets, or
+        // NAT would not recognise the reply to a probe.
+        let both = u32::from_str_radix(SKIP_MARKS.trim_start_matches("0x"), 16).unwrap();
+        assert_eq!(
+            both,
+            PROBE_MARK | u32::from_str_radix(FWMARK.trim_start_matches("0x"), 16).unwrap()
+        );
+        let s = ruleset(&InterceptSpec::new("eth0", 200));
+        let notrack = s.lines().find(|l| l.contains("notrack")).unwrap();
+        assert!(
+            notrack.contains(FWMARK) && !notrack.contains(SKIP_MARKS),
+            "{notrack}"
+        );
     }
 
     #[test]

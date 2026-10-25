@@ -21,6 +21,7 @@ import * as api from "../api";
 import { useBackend } from "./backend";
 import { countdown, plural, uptime } from "./format";
 import { usePrefs } from "./prefs";
+import { HostListsPanel, HostModePanel, useTargetConfig } from "./HostPanels";
 import { HelperInstall } from "./HelperInstall";
 import { SiteList } from "./SiteList";
 
@@ -50,7 +51,7 @@ export function HomePlaceholder() {
           <Skeleton width={120} height={44} />
         </Stack>
       </Sheet>
-      <Panel title="Your sites" description="&nbsp;">
+      <Panel className="sites-panel" title="Your sites" description="&nbsp;">
         <SitesPlaceholder />
       </Panel>
     </Columns>
@@ -193,6 +194,7 @@ export function Dashboard({ onSetup }: { onSetup: () => void }) {
   const { advanced } = usePrefs();
   const reachable = daemon?.reachable;
   const running = status?.running;
+  const target = useTargetConfig();
 
   useEffect(() => {
     if (reachable && !report) void check();
@@ -228,6 +230,7 @@ export function Dashboard({ onSetup }: { onSetup: () => void }) {
         )}
 
       <Panel
+        className="sites-panel"
         title="Your sites"
         description={
           report
@@ -254,6 +257,9 @@ export function Dashboard({ onSetup }: { onSetup: () => void }) {
           </Notice>
         )}
       </Panel>
+
+      <HostModePanel target={target} />
+      <HostListsPanel target={target} />
     </Columns>
   );
 }

@@ -4,6 +4,7 @@
 //! a queue nothing reads break the user's network.
 
 use crate::firewall::{self, Firewall, InterceptSpec};
+use crate::hostlist;
 use crate::supervisor::{Decision, Supervisor};
 use anyhow::{bail, Context, Result};
 use blkbstr_core::config::Config;
@@ -11,7 +12,7 @@ use blkbstr_core::detect;
 use blkbstr_core::engine_release;
 use blkbstr_core::paths;
 use blkbstr_core::process;
-use blkbstr_core::protocol::EngineStatus;
+use blkbstr_core::protocol::{EngineStatus, HostList};
 use blkbstr_core::registry::Platform;
 use blkbstr_core::render::{self, EngineOptions};
 use std::path::{Path, PathBuf};
@@ -87,6 +88,15 @@ impl Engine {
                 .and_then(|a| a.revert_at)
                 .map(|at| at.saturating_duration_since(Instant::now()).as_secs()),
         }
+    }
+
+    /// Whether the running config reads this list.
+    pub fn list_in_use(&self, list: HostList) -> bool {
+        self.child.is_some()
+            && self.active.as_ref().is_some_and(|a| match list {
+                HostList::Auto => a.config.uses_auto_hostlist(),
+                HostList::Manual => a.config.uses_manual_hostlist(),
+            })
     }
 
     /// Brings back what was running before shutdown. Failure is logged, not fatal: a daemon that
@@ -220,7 +230,19 @@ impl Engine {
             debug_log: Some(paths::for_engine(&paths::log_dir().join("engine.log"))),
             lua_init: lua_init()?,
             validate: false,
+            auto_hostlist: None,
+            manual_hostlist: None,
         };
+        if config.uses_auto_hostlist() {
+            let list = paths::auto_hostlist();
+            hostlist::ensure(&list)?;
+            options.auto_hostlist = Some(paths::for_engine(&list));
+        }
+        if config.uses_manual_hostlist() {
+            let list = paths::manual_hostlist();
+            hostlist::ensure(&list)?;
+            options.manual_hostlist = Some(paths::for_engine(&list));
+        }
 
         options.validate = true;
         let check_path = paths::for_engine(&runtime.join("nfqws2-check.conf"));
@@ -368,7 +390,16 @@ fn saved_path() -> PathBuf {
 fn save_active(config: &Config) -> Result<()> {
     let dir = paths::state_dir();
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
-    std::fs::write(saved_path(), config.to_json()?).context("writing the active config")
+    std::fs::write(saved_path(), config.to_json()?).context("writing the active config")?;
+    // The directory is traversable so the engine can reach the learned-hosts list, so this file
+    // guards itself.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(saved_path(), std::fs::Permissions::from_mode(0o600))
+            .context("restricting the active config")?;
+    }
+    Ok(())
 }
 
 fn clear_saved() -> Result<()> {

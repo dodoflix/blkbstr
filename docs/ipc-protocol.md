@@ -39,6 +39,10 @@ failing in an interesting way three requests later.
 | `start` | `config`, `ephemeral` | Apply a config and start the engine |
 | `confirm` | - | Keep a trial run: cancels its revert and records it as active |
 | `stop` | - | Stop the engine and restore the firewall |
+| `hosts` | `list` | A host list (`auto` or `manual`) and, for `auto`, the state of its re-check |
+| `hosts_add` | `list`, `hosts` | Add hosts; anything that is not a plain hostname is ignored |
+| `hosts_remove` | `list`, `hosts` | Remove hosts. The engine learns an `auto` host again if it still fails |
+| `hosts_check` | - | Start a re-check of the `auto` list now; returns at once |
 
 `ephemeral: true` runs the config without recording it as active, so a failed experiment is undone
 by a restart. It also arms a deadline: unless a `confirm` arrives within two minutes, the daemon
@@ -54,7 +58,7 @@ with the reason in `last_error`, so the GUI can explain the situation instead of
 request.
 
 ```json
-{"op":"ping","protocol":2}
+{"op":"ping","protocol":3}
 {"op":"start","config":{"schema":1,"name":"home-isp","strategies":[]},"ephemeral":true}
 ```
 
@@ -64,6 +68,7 @@ request.
 {"result":"pong","daemon_version":"0.1.0","protocol":1}
 {"result":"status","running":true,"active_config":"home-isp","ephemeral":true,"revert_in_seconds":97,"pid":4211}
 {"result":"status","running":false,"ephemeral":false,"last_error":"engine exited: signal: 9"}
+{"result":"hosts","list":"auto","enabled":true,"hosts":["discord.com"],"checking":false,"last_dropped":[]}
 {"result":"ok"}
 {"result":"error","code":"engine_failed","message":"nfqws2 exited with status 1"}
 ```

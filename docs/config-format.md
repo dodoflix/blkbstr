@@ -62,6 +62,42 @@ Which renders to:
 `preview_config` returns exactly this, so the UI can show it rather than asking the user to take
 the config on faith.
 
+### Which sites get a strategy
+
+Two switches pick the answer, and the app presents the four combinations as a choice:
+
+| `auto_hostlist` | `manual_hostlist` | Strategies apply to |
+| --- | --- | --- |
+| `true` (default) | `false` (default) | Sites the engine has seen fail, learned automatically |
+| `false` | `true` | Only the sites on your own list |
+| `true` | `true` | Your list, plus sites the engine has seen fail |
+| `false` | `false` | Every site on the strategy's ports |
+
+Both apply to every enabled strategy that has no `hostlist`, `hostlist_auto` or `ipset` of its own.
+
+The files are chosen and owned by the daemon (`autohostlist.txt` and `hostlist.txt` in its state
+directory), never by a config: the engine appends to the learned one as a privileged process, and
+a config is untrusted. Both are managed from the app, or over the socket with `hosts`,
+`hosts_add` and `hosts_remove`.
+
+**The learned list.** The engine adds a host after it fails (resets, retransmissions, redirects)
+and applies the strategy from then on. Once in use, the daemon re-checks the list every six hours
+and drops the hosts that now answer. The probes carry a marker the engine ignores (`SO_MARK` on
+Linux, an IP TTL of 127 on Windows), so they reach the network as they would with no strategy
+while the host stays on its list and the user's own connections to it are untouched. A host that is still blocked,
+or that a flaky connection made look blocked, stays; only a completed handshake drops one, and a
+failed control check (the network is down) drops nothing. Where neither marker exists (the BSDs,
+for now) the only way to see a host without its strategy is to take it off the list, which would
+break the user's connections, so those keep the list until you remove entries.
+
+**Your list.** The daemon renders `--hostlist=` for it plus `--hostlist-domains=blkbstr.invalid`.
+nfqws2 treats a profile whose lists are all empty as unfiltered and applies it to every host, which
+is the opposite of "only my list", so the list is never allowed to look empty. A site covers its
+subdomains.
+
+Imported zapret2 configs are saved with both off, since their profiles were written to apply to
+all traffic or to lists of their own.
+
 ### Actions are ordered
 
 `actions` is a list, not a map, because nfqws2 runs them in sequence and the orchestrators

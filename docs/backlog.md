@@ -6,6 +6,8 @@ done in this repository.
 ## Onboarding & installation
 
 - [x] Reachability check against a list of commonly blocked sites, with a per-site verdict - M2
+- [x] Check against sites grouped by category, each switchable, plus the user's own, so the
+      strategy found is proven on the variety it will meet - M2
 - [x] Locate the engine binary; refuse by name when missing - M1
 - [x] Report the installed zapret2 version - M1
 - [x] Check for LuaJIT 2.1+ / Lua 5.3+ before anything else - M2
@@ -58,6 +60,10 @@ done in this repository.
 - [x] Restart a crashed engine with backoff; give up after a crash loop - M1
 - [x] Teardown on `Drop` and on next startup, not only on clean stop - M1
 - [x] Real `EngineStatus`: pid, started_at, engine version, last error - M1
+- [x] Auto host list: apply strategies only to sites the engine has seen fail, on by default, with
+      a periodic re-check that drops hosts which load again - M4
+- [x] A host list of the user's own, alongside the learned one, with add, edit and remove for
+      both - M4
 - [x] Surface uptime, pid and engine version in the GUI - M1
 - [x] Start on boot with the last non-ephemeral config - M1
 - [x] `winws2` backend for the same `Config` - M3
