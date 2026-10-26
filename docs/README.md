@@ -5,6 +5,7 @@
 | [plan.md](plan.md) | What we are building, in what order, and what "done" means per milestone |
 | [architecture.md](architecture.md) | How the pieces fit and why the privileged work is a separate process |
 | [development.md](development.md) | Running the app and the daemon, the dev taskbar icon, troubleshooting |
+| [install-linux.md](install-linux.md) | Installing from the apt and dnf repositories or the AUR, and verifying a download |
 | [releasing.md](releasing.md) | How releases are made |
 | [design-system.md](design-system.md) | The UI building blocks, tokens and the rules they follow |
 | [config-format.md](config-format.md) | The portable config file, how it renders, and what is validated |

@@ -9,7 +9,10 @@ Releases are made by [Release Please](https://github.com/googleapis/release-plea
    and the changelog it generated from those commits.
 3. Merging that pull request tags `vx.y.z` and publishes the GitHub release. The same workflow then
    builds the Linux packages and `blkbstrd` and attaches them to that release, and in parallel
-   builds the Windows installer and attaches it.
+   builds the Windows installer and attaches it. Once both are there, the `publish` job signs
+   `SHA256SUMS` over everything attached, attests each file, and publishes the apt and dnf
+   repositories to GitHub Pages; the `aur` job pushes `blkbstr-bin` to the AUR
+   ([install-linux.md](install-linux.md)).
 
 `feat` bumps the minor version, `fix` and `perf` the patch, and `feat!` or a `BREAKING CHANGE:`
 footer the major. While the version is below 1.0 a breaking change bumps the minor. `docs`,
@@ -31,14 +34,28 @@ key and installed apps can no longer be updated. deb and rpm installs only see t
 exists. The engine is updated on its own from the System page: it reinstalls the release pinned in
 the app, and only when Blockbuster made the install (the `.blkbstr-release` marker).
 
-## Signing
+## Signing and package repositories
 
-Nothing in a release is signed or attested yet, and there are no checksums. That matters more than
-usual here: "download this build of the tool that gets around censorship" is an effective attack on
-exactly the people this project is for, so signing, checksums and build provenance attestations
-are planned (see "Ongoing" in [plan.md](plan.md)). Until then, point people only at this
-repository's releases page. On Windows, SmartScreen warns on first run and antivirus tools are
-likelier to flag the installer ([av-submission.md](av-submission.md)).
+Release assets are covered by a GPG-signed `SHA256SUMS` and build provenance attestations, both made
+by the `publish` job after every build job has attached its files. Signing the Windows installer
+itself is still planned (see "Ongoing" in [plan.md](plan.md)); it belongs in the `windows` job,
+before the upload, and the checksums then cover the signed file. Until it lands, SmartScreen warns
+on first run and antivirus tools are likelier to flag the installer
+([av-submission.md](av-submission.md)). "Download this build of the tool that gets around
+censorship" is an effective attack on the people this project is for, so point people only at this
+repository's releases page, the Pages repositories or the AUR package.
+
+One-time setup, and why a release fails without it:
+
+- Settings, Pages, Source: GitHub Actions.
+- `GPG_PRIVATE_KEY` (`gpg --armor --export-secret-keys <id>`) and `GPG_PASSPHRASE` secrets. The
+  public half is served at `key.asc` and signs the apt and dnf metadata and `SHA256SUMS`. Lose the
+  key and every user has to import a new one.
+- `AUR_SSH_PRIVATE_KEY` secret: an SSH key whose public half is on the maintainer's AUR account.
+  The first push creates the package. Without it the AUR step is skipped.
+
+The repositories hold only the latest release: each run rebuilds them from that release's `.deb`
+and `.rpm`.
 
 ## What is not in a release
 
