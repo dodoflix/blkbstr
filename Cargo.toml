@@ -29,7 +29,7 @@ widestring = "1"
 windows-service = "0.8"
 windows-sys = { version = "0.61", default-features = false }
 # 2.x: later majors need a newer rustc than rust-version above.
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "4", default-features = false, features = ["deflate"] }
 
 [profile.release]
 strip = true
