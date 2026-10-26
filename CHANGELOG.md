@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/dodoflix/blkbstr/compare/v0.2.2...v0.3.0) (2026-10-26)
+
+
+### Features
+
+* install the helper from the app on Linux ([#64](https://github.com/dodoflix/blkbstr/issues/64)) ([2651e9d](https://github.com/dodoflix/blkbstr/commit/2651e9d0b9ebc6915845489780bb6ad149ba9200))
+
+
+### Bug fixes
+
+* download the engine in the elevated step and keep the helper across app updates ([#61](https://github.com/dodoflix/blkbstr/issues/61)) ([a767ec1](https://github.com/dodoflix/blkbstr/commit/a767ec115b1458b56baaebe22a88cebce30b1f81))
+
 ## [0.2.2](https://github.com/dodoflix/blkbstr/compare/v0.2.1...v0.2.2) (2026-10-25)
 
 
