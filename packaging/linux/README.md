@@ -1,9 +1,13 @@
 # Linux packaging
 
-`install.sh` puts the daemon at `/usr/local/libexec/blkbstrd`, installs the systemd unit and the
-polkit actions, creates the `blkbstr` group and adds the invoking user to it. `uninstall.sh` removes
-all of it except the group, which it keeps so that reinstalling does not hand out a new GID and cost
-the user another logout; `groupdel blkbstr` finishes the job.
+`blkbstrd install-service` puts the daemon at `/usr/local/libexec/blkbstrd`, installs the systemd
+unit and the polkit actions, creates the `blkbstr` group, adds the invoking user to it and
+(re)starts the service. The deb and rpm carry `blkbstrd` in `/usr/lib/blockbuster/` and the app runs
+it through `pkexec` from its setup page; an AppImage cannot, because root cannot read its mount.
+From a source checkout, `install.sh` runs the same command under `sudo`. `uninstall.sh` removes all
+of it except the group, which it keeps so that reinstalling does not hand out a new GID and cost
+the user another logout; `groupdel blkbstr` finishes the job. Removing the deb or rpm does not run
+it.
 
 Group membership only reaches a session at login. A new terminal is not a new login - it inherits
 the groups of whatever started it - so the first run after installing needs a full logout, or a

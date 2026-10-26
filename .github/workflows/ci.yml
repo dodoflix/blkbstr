@@ -133,7 +133,7 @@ jobs:
 
       - name: Profiles agree with the installer on where the daemon lives
         run: |
-          libexec=$(sed -n 's/^LIBEXEC=//p' packaging/linux/install.sh)
+          libexec=$(sed -n 's/^pub const LIBEXEC: &str = "\(.*\)";/\1/p' crates/blkbstr-daemon/src/install_service.rs)
           grep -q "$libexec" packaging/linux/apparmor/usr.local.libexec.blkbstrd
           grep -q "$libexec" packaging/linux/selinux/blkbstr.fc
 

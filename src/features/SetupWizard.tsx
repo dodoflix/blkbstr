@@ -26,7 +26,7 @@ import {
   useToast,
 } from "../ui";
 import * as api from "../api";
-import { useHelperInstall } from "./HelperInstall";
+import { ReloginNotice, useHelperInstall } from "./HelperInstall";
 import { useBackend } from "./backend";
 import { impactLabel, plainImpact, useAutoConfig, type AutoConfig } from "./autoconfig";
 import { plural } from "./format";
@@ -117,7 +117,7 @@ function ComputerStep({ onNext }: { onNext: () => void }) {
       title: "Background helper",
       detail: daemon.reachable ? `Running${advanced ? `, version ${daemon.version}` : ""}` : "Not running. Install it once, then check again.",
       action:
-        !daemon.reachable && windows ? (
+        !daemon.reachable && helper.canInstall ? (
           <Button size="sm" icon="shield-check" loading={helper.installing} onClick={() => void helper.install()}>
             Install
           </Button>
@@ -161,7 +161,7 @@ function ComputerStep({ onNext }: { onNext: () => void }) {
   return (
     <Stack gap={5}>
       <RowList label="Requirements" items={rows} />
-      {!daemon.reachable && !windows && <CodeBlock code="packaging/linux/install.sh" title="Install the helper" />}
+      {helper.relogin && <ReloginNotice />}
       {installError && (
         <Notice tone="danger" title="The engine did not install">
           {installError}

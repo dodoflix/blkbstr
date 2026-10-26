@@ -1,0 +1,18 @@
+{
+  "bundle": {
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/lib/blockbuster/blkbstrd": "../target/release/blkbstrd",
+          "/usr/share/polkit-1/actions/dev.blkbstr.install-service.policy": "../packaging/linux/dev.blkbstr.install-service.policy"
+        }
+      },
+      "rpm": {
+        "files": {
+          "/usr/lib/blockbuster/blkbstrd": "../target/release/blkbstrd",
+          "/usr/share/polkit-1/actions/dev.blkbstr.install-service.policy": "../packaging/linux/dev.blkbstr.install-service.policy"
+        }
+      }
+    }
+  }
+}

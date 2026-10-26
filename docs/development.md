@@ -40,7 +40,8 @@ cargo build --release -p blkbstr-daemon
 sudo packaging/linux/install.sh
 ```
 
-The installer creates a `blkbstr` group, adds you to it, and installs a systemd unit. **Log out
+The installer creates a `blkbstr` group, adds you to it, and installs a systemd unit. A packaged
+app does the same from its setup page. **Log out
 and back in** - group membership only applies to new sessions, so until you do, the GUI will
 report the service as unreachable.
 

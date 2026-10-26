@@ -95,24 +95,9 @@ fn unpack_as_root(archive: &Path) -> Result<(), String> {
 
 #[cfg(not(windows))]
 fn unpack_as_root(tarball: &Path) -> Result<(), String> {
-    let out = process::command("pkexec")
-        .args([DAEMON, "install-engine"])
-        .arg(tarball)
-        .output()
-        .map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => {
-                "pkexec is not installed (it comes with polkit)".to_owned()
-            }
-            _ => format!("running pkexec: {e}"),
-        })?;
-    if out.status.success() {
-        return Ok(());
-    }
-    // pkexec exits 126 when the prompt is dismissed and 127 when it cannot be shown, both silent.
-    let said = String::from_utf8_lossy(&out.stderr).trim().to_owned();
-    Err(match out.status.code() {
-        Some(126) => "the authorisation prompt was dismissed".into(),
-        _ if said.is_empty() => format!("the install failed ({})", out.status),
-        _ => said,
-    })
+    crate::pkexec::run(
+        Path::new(DAEMON),
+        &["install-engine", &tarball.to_string_lossy()],
+        "the install",
+    )
 }

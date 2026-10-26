@@ -71,13 +71,36 @@ pub fn set_active(active: bool) -> Result<(), String> {
     run(if active { "start" } else { "stop" })
 }
 
-/// Registers the service, which takes administrator rights once. On Linux that is
-/// `packaging/linux/install.sh`, run from a terminal, so there is nothing to do from here.
+/// Registers the service, which takes administrator rights once.
 pub fn install() -> Result<(), String> {
     #[cfg(windows)]
     return windows::install();
-    #[allow(unreachable_code)]
-    Err("run packaging/linux/install.sh once to install the helper".into())
+    #[cfg(not(windows))]
+    return crate::pkexec::run(
+        &packaged_daemon()?,
+        &["install-service"],
+        "installing the helper",
+    );
+}
+
+/// Where the deb and rpm put the helper. `install-service` copies it to its permanent home, so the
+/// service never runs from here.
+#[cfg(not(windows))]
+const PACKAGED_DAEMON: &str = "/usr/lib/blockbuster/blkbstrd";
+
+/// The packaged helper, or the one built next to the app in a source checkout. An AppImage has
+/// neither: root cannot read its FUSE mount, so there is nothing safe to run as root.
+#[cfg(not(windows))]
+fn packaged_daemon() -> Result<std::path::PathBuf, String> {
+    let packaged = std::path::PathBuf::from(PACKAGED_DAEMON);
+    let sibling = std::env::current_exe()
+        .map_err(|e| format!("finding the app: {e}"))?
+        .with_file_name("blkbstrd");
+    [packaged, sibling].into_iter().find(|p| p.is_file()).ok_or_else(|| {
+        "the helper is not installed with this copy of Blockbuster. Install the deb, rpm or AUR \
+         package, or run packaging/linux/install.sh from a source checkout"
+            .into()
+    })
 }
 
 #[cfg_attr(windows, allow(dead_code))]
