@@ -30,7 +30,7 @@ pub fn unpack(bytes: &[u8], sha256: &str, root: &str, binary_dir: &str, dest: &P
         if !entry.is_file() {
             continue;
         }
-        let name = entry.name().to_owned();
+        let name = entry.name()?.into_owned();
         let Some(rel) = name.strip_prefix(root).and_then(|r| r.strip_prefix('/')) else {
             continue;
         };
