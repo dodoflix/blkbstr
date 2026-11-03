@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/dodoflix/blkbstr/compare/v0.3.0...v0.4.0) (2026-11-03)
+
+
+### Features
+
+* catch fake DNS, check sites as endpoint bundles, one-click encrypted DNS, faster search ([#72](https://github.com/dodoflix/blkbstr/issues/72)) ([7c8fa9f](https://github.com/dodoflix/blkbstr/commit/7c8fa9f7bcf3d58c0ee8de8024cd9457211e0d16))
+
 ## [0.3.0](https://github.com/dodoflix/blkbstr/compare/v0.2.2...v0.3.0) (2026-11-03)
 
 
