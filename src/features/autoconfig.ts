@@ -71,9 +71,9 @@ export type Impact = {
 
 /** Median handshake time across a sample of hosts that already worked, plus any that stopped
  *  working. Three rounds because one handshake is noisy; a host counts as broken only if it failed
- *  every round. A round where the control host failed says nothing about the strategy and is
- *  dropped. */
-async function measure(hosts: string[]): Promise<Omit<Impact, "deltaMs">> {
+ *  every round. A round where the control host failed says nothing about the other hosts and is
+ *  dropped; with none left, there is no measurement. */
+async function measure(hosts: string[]): Promise<Omit<Impact, "deltaMs"> | undefined> {
   const rounds: number[] = [];
   const failures = new Map<string, number>();
   for (let i = 0; i < 3; i++) {
@@ -86,7 +86,7 @@ async function measure(hosts: string[]): Promise<Omit<Impact, "deltaMs">> {
       if (site.verdict !== "fine") failures.set(site.host, (failures.get(site.host) ?? 0) + 1);
     }
   }
-  if (rounds.length === 0) throw new Error("the network did not answer");
+  if (rounds.length === 0) return undefined;
   return {
     latencyMs: median(rounds),
     broke: [...failures].filter(([, n]) => n === rounds.length).map(([host]) => host),
@@ -287,7 +287,7 @@ export function useAutoConfig() {
       if (shortlist.length > 0 && !cancelled.current && !networkDown) {
         setMeasuring(true);
         // With no baseline to compare against there is nothing to measure.
-        const before = await measure(unaffected).catch(() => undefined);
+        const before = await measure(unaffected);
         for (const [i, step] of shortlist.entries()) {
           if (cancelled.current || !before) break;
           setProgress([i + 1, shortlist.length]);
@@ -295,10 +295,16 @@ export function useAutoConfig() {
             await api.engineStart(trial(step.config), true);
             await sleep(SETTLE_MS);
             const after = await measure(unaffected);
-            step.impact = { ...after, deltaMs: after.latencyMs - before.latencyMs };
+            // The control never answered with this strategy on. Assume it broke it: a throttled
+            // network only costs this candidate its place, while trusting it could offer one that
+            // takes the connection down.
+            step.impact = after
+              ? { ...after, deltaMs: after.latencyMs - before.latencyMs }
+              : { latencyMs: before.latencyMs, deltaMs: 0, broke: [baseline.control.host] };
           } catch {
             // A candidate that started once and will not start again is not one to offer.
             step.impact = undefined;
+            step.unblocked = 0;
           } finally {
             await api.engineStop();
           }
@@ -306,7 +312,7 @@ export function useAutoConfig() {
         setSteps((prev) =>
           prev.map((step) => {
             const measured = shortlist.find((s) => s.name === step.name);
-            return measured ? { ...step, impact: measured.impact } : step;
+            return measured ? { ...step, impact: measured.impact, unblocked: measured.unblocked } : step;
           }),
         );
         setMeasuring(false);
