@@ -127,9 +127,27 @@ pub fn parameter_file(config: &Config, engine: &EngineOptions) -> String {
         }
     }
 
-    let mut out = lines.join("\n");
+    // nfqws2 splits the file like a shell does (`wordexp`), so a line with a space, quote, bracket or
+    // glob in it, such as a path under `C:\Program Files` or the raw WinDivert filter, is quoted.
+    let mut out = lines
+        .iter()
+        .map(|l| shell_word(l))
+        .collect::<Vec<_>>()
+        .join("\n");
     out.push('\n');
     out
+}
+
+/// `line` as one shell word: as is when nothing in it is special to `wordexp`, else single-quoted.
+fn shell_word(line: &str) -> String {
+    let plain = line
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || "-_=@/:.,+%".contains(c));
+    if plain {
+        line.to_owned()
+    } else {
+        format!("'{}'", line.replace('\'', r"'\''"))
+    }
 }
 
 /// The TCP and UDP ports the enabled strategies match, each merged and sorted. Intercepting more
@@ -426,6 +444,25 @@ mod tests {
             "{without}"
         );
         assert!(!parameter_file(&config, &engine()).contains("--wf-raw-filter"));
+    }
+
+    #[test]
+    fn a_line_the_engine_would_split_reaches_it_as_one_word() {
+        let options = EngineOptions {
+            platform: Platform::Windows,
+            lua_init: vec!["C:/Program Files/zapret2/lua/zapret-lib.lua".into()],
+            ..engine()
+        };
+        let out = parameter_file(&starter_config("t"), &options);
+        assert!(
+            out.contains("\n'--lua-init=@C:/Program Files/zapret2/lua/zapret-lib.lua'\n"),
+            "{out}"
+        );
+        assert!(
+            out.contains("\n--filter-tcp=443\n"),
+            "plain lines stay bare: {out}"
+        );
+        assert_eq!(shell_word("--x=it's"), r"'--x=it'\''s'");
     }
 
     #[test]
