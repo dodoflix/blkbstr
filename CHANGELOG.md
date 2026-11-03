@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.0](https://github.com/dodoflix/blkbstr/compare/v0.2.2...v0.3.0) (2026-11-03)
+
+
+### Features
+
+* install the helper from the app on Linux ([#64](https://github.com/dodoflix/blkbstr/issues/64)) ([2651e9d](https://github.com/dodoflix/blkbstr/commit/2651e9d0b9ebc6915845489780bb6ad149ba9200))
+
+
+### Bug fixes
+
+* **deps:** bump zip from 2.6.1 to 9.2 (GHSA-m665-v7pm-7grj, GHSA-q7v9-x93c-xqv3) ([#67](https://github.com/dodoflix/blkbstr/issues/67)) ([6080162](https://github.com/dodoflix/blkbstr/commit/608016237a83b2bec04708251eb8002bfba7ea18))
+* download the engine in the elevated step and keep the helper across app updates ([#61](https://github.com/dodoflix/blkbstr/issues/61)) ([a767ec1](https://github.com/dodoflix/blkbstr/commit/a767ec115b1458b56baaebe22a88cebce30b1f81))
+* **windows:** get the engine installed and running on a clean Windows without Defender blocks ([#69](https://github.com/dodoflix/blkbstr/issues/69)) ([04649a4](https://github.com/dodoflix/blkbstr/commit/04649a468bba1356654cfb49c1d3987df1e8d5eb))
+
+
+### Documentation
+
+* check the Windows installer right after release, and hide the release if Defender flags it ([#70](https://github.com/dodoflix/blkbstr/issues/70)) ([8c28324](https://github.com/dodoflix/blkbstr/commit/8c28324e3656eb9111f41ce4138b8b433469b998))
+
 ## [0.2.2](https://github.com/dodoflix/blkbstr/compare/v0.2.1...v0.2.2) (2026-10-25)
 
 
