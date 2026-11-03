@@ -30,6 +30,9 @@ jobs:
           & "$env:ProgramFiles\Windows Defender\MpCmdRun.exe" -SignatureUpdate | Select-Object -Last 3
       - name: Scan both
         run: |
+          Set-MpPreference -MAPSReporting Advanced -SubmitSamplesConsent SendSafeSamples -DisableRealtimeMonitoring $false
+          Get-MpPreference | Format-List MAPSReporting, SubmitSamplesConsent
+          (Get-MpComputerStatus).RealTimeProtectionEnabled
           $mp = "$env:ProgramFiles\Windows Defender\MpCmdRun.exe"
           foreach ($d in 'flagged', 'clean') {
             $f = (Get-ChildItem $d -Filter *-setup.exe).FullName
