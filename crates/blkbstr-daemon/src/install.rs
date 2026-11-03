@@ -5,7 +5,6 @@
 use anyhow::{bail, Context, Result};
 use blkbstr_core::engine_release;
 use flate2::read::GzDecoder;
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Read;
 use std::os::unix::fs::PermissionsExt;
@@ -36,7 +35,7 @@ pub fn run(tarball: &Path) -> Result<()> {
 /// Writes `nfqws2` and `lua/*` under `dest`, and nothing else from the archive: no `config`, so an
 /// install made here is never mistaken for one to import from.
 fn unpack(bytes: &[u8], sha256: &str, root: &str, binary_dir: &str, dest: &Path) -> Result<()> {
-    let got = format!("{:x}", Sha256::digest(bytes));
+    let got = crate::sha256_hex(bytes);
     if got != sha256 {
         bail!(
             "the download does not match the pinned release (sha256 {got}); nothing was installed"
@@ -110,7 +109,7 @@ mod tests {
     }
 
     fn sum(bytes: &[u8]) -> String {
-        format!("{:x}", Sha256::digest(bytes))
+        crate::sha256_hex(bytes)
     }
 
     #[test]

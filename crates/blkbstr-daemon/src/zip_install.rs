@@ -2,7 +2,6 @@
 //! Platform-neutral so the unpacking is tested on every CI leg.
 
 use anyhow::{bail, Context, Result};
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
@@ -16,7 +15,7 @@ fn is_engine_file(name: &str) -> bool {
 /// Writes the engine files flat under `dest` and `lua/*` beside them, and nothing else from the
 /// archive: not `killall.exe`, not `mdig.exe`, not the shell scripts.
 pub fn unpack(bytes: &[u8], sha256: &str, root: &str, binary_dir: &str, dest: &Path) -> Result<()> {
-    let got = format!("{:x}", Sha256::digest(bytes));
+    let got = crate::sha256_hex(bytes);
     if got != sha256 {
         bail!(
             "the download does not match the pinned release (sha256 {got}); nothing was installed"
@@ -113,7 +112,7 @@ mod tests {
     }
 
     fn sum(bytes: &[u8]) -> String {
-        format!("{:x}", Sha256::digest(bytes))
+        crate::sha256_hex(bytes)
     }
 
     fn complete() -> Vec<(&'static str, &'static [u8])> {

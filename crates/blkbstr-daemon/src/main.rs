@@ -37,6 +37,16 @@ use std::sync::{Arc, Mutex};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Lowercase hex SHA-256 of `bytes`, the form the pinned release hashes are written in.
+/// sha2 0.11's digest no longer formats with `{:x}`.
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 /// How often the monitor checks on the engine.
 const MONITOR_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
 
