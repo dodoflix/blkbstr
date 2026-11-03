@@ -17,8 +17,9 @@ so users are not affected; anyone who downloads it by hand is. Submit the zip, n
 
 ## Before each release
 
-1. Releases are unsigned, which is judged on bytes alone and flagged far more often, so expect
-   more reports from users. Signing the installer is planned.
+1. Releases are unsigned and will stay so (a certificate costs money the project does not have),
+   so they are judged on bytes alone and flagged far more often. The real-Windows run and the
+   Microsoft submission below are what keep users from being blocked.
 2. Upload the installer to [VirusTotal](https://www.virustotal.com) and note which engines flag it.
    That list is the work list below. Also run it once on a real Windows 11 with Defender on
    defaults (cloud protection and real-time on): download it from the release page, run it, and
