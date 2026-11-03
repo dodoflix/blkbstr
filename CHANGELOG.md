@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/dodoflix/blkbstr/compare/v0.4.0...v0.4.1) (2026-11-03)
+
+
+### Bug fixes
+
+* pace site checks and wait out connection-rate limits during the strategy search ([#74](https://github.com/dodoflix/blkbstr/issues/74)) ([d8a3244](https://github.com/dodoflix/blkbstr/commit/d8a3244510685039188697f11514c097cc311e3f))
+
 ## [0.4.0](https://github.com/dodoflix/blkbstr/compare/v0.3.0...v0.4.0) (2026-11-03)
 
 
