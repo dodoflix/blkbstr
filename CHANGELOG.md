@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/dodoflix/blkbstr/compare/v0.4.1...v0.4.2) (2026-11-03)
+
+
+### Bug fixes
+
+* do not offer a strategy that took the control host down while being measured ([#76](https://github.com/dodoflix/blkbstr/issues/76)) ([3c5cba2](https://github.com/dodoflix/blkbstr/commit/3c5cba26247ebc28adbd42bd5f97b8cb4cf79cef))
+
 ## [0.4.1](https://github.com/dodoflix/blkbstr/compare/v0.4.0...v0.4.1) (2026-11-03)
 
 
