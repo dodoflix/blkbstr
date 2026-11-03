@@ -26,6 +26,15 @@ const ENOUGH = 3;
 /** Each measured one costs a start and three checks. */
 const MEASURE_AT_MOST = 5;
 
+/** Working sites the cost measurement re-checks, besides the control. Three rounds over every
+ *  working site per candidate opens enough connections to trip a router's or ISP's rate limit, after
+ *  which healthy sites read as broken. */
+const MEASURE_SAMPLE = 8;
+
+/** A connection-rate limit tripped by earlier checks lapses within a few minutes. */
+const THROTTLE_PAUSE_MS = 30_000;
+const THROTTLE_PAUSES = 4;
+
 /** Domains a bundle needs that no fixed host can probe: Discord voice signals over TLS to
  *  per-region <region>.discord.media hosts before any UDP flows. */
 const UNPROBED: Record<string, string[]> = { "discord.com": ["discord.media"] };
@@ -60,14 +69,16 @@ export type Impact = {
   broke: string[];
 };
 
-/** Median handshake time across hosts that already worked, plus any that stopped working. Three
- *  rounds because one handshake is noisy; a host counts as broken only if it failed all three. */
+/** Median handshake time across a sample of hosts that already worked, plus any that stopped
+ *  working. Three rounds because one handshake is noisy; a host counts as broken only if it failed
+ *  every round. A round where the control host failed says nothing about the strategy and is
+ *  dropped. */
 async function measure(hosts: string[]): Promise<Omit<Impact, "deltaMs">> {
   const rounds: number[] = [];
   const failures = new Map<string, number>();
-  const ROUNDS = 3;
-  for (let i = 0; i < ROUNDS; i++) {
+  for (let i = 0; i < 3; i++) {
     const report = await api.checkReachability(hosts, api.TRIAL_TIMEOUT_MS);
+    if (!report.network_ok) continue;
     rounds.push(
       median(report.sites.filter((site) => site.verdict === "fine").map((site) => site.elapsed_ms)),
     );
@@ -75,10 +86,21 @@ async function measure(hosts: string[]): Promise<Omit<Impact, "deltaMs">> {
       if (site.verdict !== "fine") failures.set(site.host, (failures.get(site.host) ?? 0) + 1);
     }
   }
+  if (rounds.length === 0) throw new Error("the network did not answer");
   return {
     latencyMs: median(rounds),
-    broke: [...failures].filter(([, n]) => n === ROUNDS).map(([host]) => host),
+    broke: [...failures].filter(([, n]) => n === rounds.length).map(([host]) => host),
   };
+}
+
+/** Whether the control host answers with no strategy running, waiting out a connection-rate limit
+ *  that makes every new connection fail for a while after a burst. */
+async function networkBack(cancelled: { current: boolean }): Promise<boolean> {
+  for (let pause = 0; ; pause++) {
+    if ((await api.checkReachability([], api.TRIAL_TIMEOUT_MS)).network_ok) return true;
+    if (pause === THROTTLE_PAUSES || cancelled.current) return false;
+    await sleep(THROTTLE_PAUSE_MS);
+  }
 }
 
 /** Best first: most sites through, then least disturbance, then the hand-ranked order. Partial
@@ -173,8 +195,11 @@ export function useAutoConfig() {
       // No strategy changes a DNS answer, so these are named instead of walked.
       const unfixable = baseline.sites.filter((site) => site.verdict !== "fine" && !fixable(site.verdict)).map((site) => site.host);
       const dnsNote = unfixable.length > 0 ? ` ${unfixable.join(", ")} cannot be fixed by any strategy: the DNS answer is wrong. ${DNS_ADVICE}` : "";
-      // What "did this make anything worse" is measured against; includes the control host.
-      const unaffected = baseline.sites.filter((site) => site.verdict === "fine").map((site) => site.host);
+      // What "did this make anything worse" is measured against: a sample spread over the list,
+      // which is grouped by category, plus the control host.
+      const fine = baseline.sites.filter((site) => site.verdict === "fine").map((site) => site.host);
+      const every = Math.max(1, Math.ceil(fine.length / MEASURE_SAMPLE));
+      const unaffected = fine.filter((_, i) => i % every === 0);
       unaffected.push(baseline.control.host);
       setBlockedCount(blocked.length);
       // A blocked bundle goes on the lists whole, as domains: the engine's lists match subdomains, so
@@ -193,6 +218,17 @@ export function useAutoConfig() {
       const skipped = all.length - usable.length;
       setProgress([0, usable.length]);
       let early = false;
+      let networkDown = false;
+      // Always stops, so every candidate is measured against the same untouched machine.
+      const attempt = async (config: api.Config) => {
+        await api.engineStart(trial(config), true);
+        try {
+          await sleep(SETTLE_MS);
+          return await api.checkReachability(blocked, api.TRIAL_TIMEOUT_MS);
+        } finally {
+          await api.engineStop();
+        }
+      };
       for (const [i, { config, cost }] of usable.entries()) {
         if (cancelled.current) break;
         setProgress([i + 1, usable.length]);
@@ -201,18 +237,31 @@ export function useAutoConfig() {
           { name: config.name, notes: config.notes, outcome: "trying...", unblocked: 0, cost, config },
         ]);
         let step: Step = { name: config.name, notes: config.notes, outcome: "", unblocked: 0, cost, config };
+        let report: api.Report;
         try {
-          await api.engineStart(trial(config), true);
+          report = await attempt(config);
+          // The control failing is this strategy breaking it, or the network refusing new
+          // connections for a while after a burst; only the second outlasts the engine.
+          if (!report.network_ok && !(await api.checkReachability([], api.TRIAL_TIMEOUT_MS)).network_ok) {
+            finish(config.name, "waiting for the network...");
+            if (!(await networkBack(cancelled))) {
+              networkDown = true;
+              finish(config.name, "the network stopped answering");
+              break;
+            }
+            report = await attempt(config);
+          }
         } catch (e) {
           // The engine refuses a config it cannot load before any rule is installed: skip it.
           finish(config.name, `the engine refused it: ${e}`);
           continue;
         }
-        await sleep(SETTLE_MS);
-        const report = await api.checkReachability(blocked, api.TRIAL_TIMEOUT_MS);
-        // Always stop, so every candidate is measured against the same untouched machine.
-        await api.engineStop();
 
+        if (!report.network_ok) {
+          tried.push({ ...step, worked: false, unblocked: 0 });
+          finish(config.name, `broke ${report.control.host}`);
+          continue;
+        }
         const unblocked = report.sites.filter((site) => site.verdict === "fine").length;
         const worked = unblocked === blocked.length;
         step = { ...step, worked, unblocked };
@@ -235,11 +284,12 @@ export function useAutoConfig() {
           : "";
       // Only the best few are measured (three more checks per candidate).
       const shortlist = rank(tried).slice(0, MEASURE_AT_MOST);
-      if (shortlist.length > 0 && !cancelled.current) {
+      if (shortlist.length > 0 && !cancelled.current && !networkDown) {
         setMeasuring(true);
-        const before = await measure(unaffected);
+        // With no baseline to compare against there is nothing to measure.
+        const before = await measure(unaffected).catch(() => undefined);
         for (const [i, step] of shortlist.entries()) {
-          if (cancelled.current) break;
+          if (cancelled.current || !before) break;
           setProgress([i + 1, shortlist.length]);
           try {
             await api.engineStart(trial(step.config), true);
@@ -262,7 +312,11 @@ export function useAutoConfig() {
         setMeasuring(false);
       }
 
-      const stopped = cancelled.current ? ` Stopped after ${tried.length} of ${usable.length}.` : "";
+      const stopped = networkDown
+        ? ` ${baseline.control.host} stopped answering even with no strategy running, so the search stopped after ${tried.length} of ${usable.length}. Some networks refuse new connections for a while after many in a row; search again in a few minutes.`
+        : cancelled.current
+          ? ` Stopped after ${tried.length} of ${usable.length}.`
+          : "";
       const helped = rank(tried);
       if (helped.length === 0) {
         setError(
