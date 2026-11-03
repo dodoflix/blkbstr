@@ -7,6 +7,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{ErrorKind, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, ToSocketAddrs};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 /// A group of sites that are blocked together, since a censor tends to treat a category alike and
@@ -241,46 +242,66 @@ fn plain_connect(address: &SocketAddr, timeout: Duration) -> std::io::Result<Tcp
     TcpStream::connect_timeout(address, timeout)
 }
 
-/// Checks the control host and every site concurrently, so the timeout is not multiplied by the list.
+/// Checks the control host and every site a few at a time, so the timeout is not multiplied by the
+/// list.
 pub fn check(hosts: &[String], timeout: Duration) -> Report {
     check_with(hosts, timeout, &plain_connect)
 }
 
-pub fn check_with(hosts: &[String], timeout: Duration, connect: &Connector) -> Report {
-    std::thread::scope(|scope| {
-        // One probe per distinct name, since bundles overlap with the list and with each other.
-        let mut running = HashMap::new();
-        let names = std::iter::once(CONTROL_HOST)
-            .chain(hosts.iter().map(String::as_str))
-            .chain(hosts.iter().flat_map(|h| endpoints_of(h)).copied());
-        for host in names {
-            running
-                .entry(host)
-                .or_insert_with(|| scope.spawn(move || check_host_with(host, timeout, connect)));
-        }
-        let done: HashMap<&str, SiteResult> = running
-            .into_iter()
-            .map(|(host, handle)| (host, handle.join().unwrap_or_else(|_| failed(host))))
-            .collect();
+/// Probes in flight at once. One SYN per site in a single burst trips the connection-rate limits of
+/// consumer routers and ISPs, after which healthy sites read as blocked for minutes; eight in a row
+/// was measured to stay clear of one on a Turkish home line while a full burst tripped it.
+const IN_FLIGHT: usize = 8;
 
-        let control = done[CONTROL_HOST].clone();
-        Report {
-            network_ok: control.verdict == Verdict::Fine,
-            control,
-            sites: hosts
-                .iter()
-                .map(|host| match endpoints_of(host) {
-                    [] => done[host.as_str()].clone(),
-                    others => fold_bundle(
-                        std::iter::once(host.as_str())
-                            .chain(others.iter().copied())
-                            .map(|h| done[h].clone())
-                            .collect(),
-                    ),
-                })
-                .collect(),
+pub fn check_with(hosts: &[String], timeout: Duration, connect: &Connector) -> Report {
+    // One probe per distinct name, since bundles overlap with the list and with each other.
+    let mut names: Vec<&str> = Vec::new();
+    for host in std::iter::once(CONTROL_HOST)
+        .chain(hosts.iter().map(String::as_str))
+        .chain(hosts.iter().flat_map(|h| endpoints_of(h)).copied())
+    {
+        if !names.contains(&host) {
+            names.push(host);
         }
-    })
+    }
+    let next = AtomicUsize::new(0);
+    let done: HashMap<&str, SiteResult> = std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..IN_FLIGHT.min(names.len()))
+            .map(|_| {
+                scope.spawn(|| {
+                    let mut out = Vec::new();
+                    while let Some(&host) = names.get(next.fetch_add(1, Ordering::Relaxed)) {
+                        out.push((host, check_host_with(host, timeout, connect)));
+                    }
+                    out
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|w| w.join().unwrap_or_default())
+            .collect()
+    });
+    // A worker that panicked took its results with it.
+    let result = |host: &str| done.get(host).cloned().unwrap_or_else(|| failed(host));
+
+    let control = result(CONTROL_HOST);
+    Report {
+        network_ok: control.verdict == Verdict::Fine,
+        control,
+        sites: hosts
+            .iter()
+            .map(|host| match endpoints_of(host) {
+                [] => result(host),
+                others => fold_bundle(
+                    std::iter::once(host.as_str())
+                        .chain(others.iter().copied())
+                        .map(result)
+                        .collect(),
+                ),
+            })
+            .collect(),
+    }
 }
 
 /// One verdict for a site probed at several endpoints, the first being the site itself. A wrong DNS

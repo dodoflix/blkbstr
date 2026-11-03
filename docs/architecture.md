@@ -79,12 +79,15 @@ a machine where nothing is installed yet.
 - **Reachability** (`reachability.rs`) probes a list of commonly blocked hosts and gives each a
   verdict: DNS answered wrongly, TCP blocked, TLS reset, TLS silent, or fine. Nothing is uploaded.
   A site with several endpoints (Discord's gateway and CDN, say) is checked as a bundle and loads
-  only when all of them do.
+  only when all of them do. Eight probes run at a time: one burst for the whole list trips the
+  connection-rate limits of some routers and ISPs, after which healthy sites read as blocked.
 - **Auto-configuration** walks `candidates::ranked()`, cheapest first. The walk runs in the UI:
   each step is an ordinary ephemeral start, a reachability check and a stop. The daemon's
   confirm-or-revert deadline, not the GUI, is what restores the machine if the window dies mid-walk.
   It stops after three strategies get everything through, and skips hosts whose DNS answer is fake
-  (no strategy can fix those).
+  (no strategy can fix those). When the control host fails even with the engine off, the network is
+  refusing new connections: the walk waits up to two minutes and retries that strategy, or stops and
+  says so. The cost measurement re-checks a sample of eight working sites, not all of them.
 - **Import** (`legacy.rs`) turns an existing zapret2 `config` into a `Config`. See
   [config-format.md](config-format.md#importing-from-zapret2).
 
