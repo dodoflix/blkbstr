@@ -2,9 +2,9 @@
 //! The GUI runs this elevated through UAC, so the install is administrator work the user authorises,
 //! not something the service does on a request from the pipe.
 //!
-//! The archive is fetched into memory here rather than by the GUI into the user's cache: it carries
-//! the WinDivert driver, so Defender blocks any read of a copy on disk (`os error 225`), and an
-//! exclusion added afterwards does not lift that.
+//! The archive is fetched into memory here rather than by the GUI into the user's cache: Defender
+//! flags the zip itself (`Trojan:Win32/Suschil!rfn`) and refuses any read of a copy on disk
+//! (`os error 225`), and an exclusion added afterwards does not lift that. Its unpacked files pass.
 
 use crate::zip_install;
 use anyhow::{bail, Context, Result};

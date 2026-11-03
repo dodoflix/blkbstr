@@ -16,6 +16,8 @@ npm install && npm run tauri dev
 
 Or download a package from the [releases](https://github.com/dodoflix/blkbstr/releases) (Linux: apt, dnf and AUR in [docs/install-linux.md](docs/install-linux.md)). Running the engine also needs a small background service, plus `nftables` and a Lua runtime on Linux ([docs/development.md](docs/development.md) covers setting those up); the setup wizard installs zapret2 itself.
 
+On Windows the installer is not signed yet, so Windows shows "Windows protected your PC" the first time: choose **More info**, then **Run anyway**. Only do that for the installer from this project's releases page.
+
 It walks you through checking your computer, testing which sites are blocked, trying strategies one by one and saving the one that works. Trial runs undo themselves unless you keep them, configs are portable JSON files, and nothing leaves your machine.
 
 Also: a simple view by default and an advanced one with the real parameter file, light and dark themes, logs with one-click export, and a command palette on Ctrl+K.
