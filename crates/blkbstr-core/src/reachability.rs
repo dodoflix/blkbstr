@@ -779,6 +779,41 @@ mod tests {
     }
 
     #[test]
+    fn no_more_than_the_cap_are_probed_at_once_and_each_name_once() {
+        use std::sync::Mutex;
+        // The connector type is 'static, so what it counts lives in statics.
+        static IN_FLIGHT_NOW: AtomicUsize = AtomicUsize::new(0);
+        static PEAK: AtomicUsize = AtomicUsize::new(0);
+        static SEEN: Mutex<Vec<IpAddr>> = Mutex::new(Vec::new());
+        fn connect(address: &SocketAddr, _: Duration) -> std::io::Result<TcpStream> {
+            let now = IN_FLIGHT_NOW.fetch_add(1, Ordering::SeqCst) + 1;
+            PEAK.fetch_max(now, Ordering::SeqCst);
+            std::thread::sleep(Duration::from_millis(20));
+            SEEN.lock().unwrap().push(address.ip());
+            IN_FLIGHT_NOW.fetch_sub(1, Ordering::SeqCst);
+            Err(ErrorKind::TimedOut.into())
+        }
+        // TEST-NET-3 literals: they resolve offline and are not sinkholes, so each reaches the connector.
+        let mut hosts: Vec<String> = (1..=20).map(|i| format!("203.0.113.{i}")).collect();
+        hosts.push("203.0.113.1".into());
+
+        let report = check_with(&hosts, Duration::from_secs(1), &connect);
+        let peak = PEAK.load(Ordering::SeqCst);
+        assert!(peak <= IN_FLIGHT, "{peak} in flight");
+        assert_eq!(report.sites.len(), hosts.len());
+        assert!(report
+            .sites
+            .iter()
+            .all(|s| s.verdict == Verdict::TcpBlocked));
+        let seen = SEEN.lock().unwrap();
+        let test_net = seen
+            .iter()
+            .filter(|ip| ip.to_string().starts_with("203.0.113."))
+            .count();
+        assert_eq!(test_net, 20, "a name listed twice is probed once");
+    }
+
+    #[test]
     fn every_bundle_belongs_to_a_listed_site() {
         let listed = default_hosts();
         for (site, _) in BUNDLES {
