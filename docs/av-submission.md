@@ -5,9 +5,15 @@ heuristic engine that is malware, so some vendors will flag the installer, `blkb
 engine's files. Two different things get flagged and they are fixed differently:
 
 - **Our files** (the installer, `Blockbuster.exe`, `blkbstrd.exe`): ours to submit as the author.
-- **Upstream's files** (`winws2.exe`, `cygwin1.dll`, `WinDivert.dll`, `WinDivert64.sys`): not ours
-  to submit as the author, but the same vendor forms accept anyone's file, and a flag on these
-  breaks the engine, not the app. Report them too, naming the upstream project.
+- **Upstream's files** (the zapret2 zip, `winws2.exe`, `cygwin1.dll`, `WinDivert.dll`,
+  `WinDivert64.sys`): not ours to submit as the author, but the same vendor forms accept anyone's
+  file, and a flag on these breaks the engine, not the app. Report them too, naming the upstream
+  project.
+
+Known today: Defender flags `zapret2-v1.0.5.2.zip` (SHA-256
+`f585590bea6da82ac2c74926f6ac17e6204ee8b53e455c2ba2edae0c58c5d4ac`) as `Trojan:Win32/Suschil!rfn`,
+while every file inside it passes on its own. The app never writes that zip to disk on Windows,
+so users are not affected; anyone who downloads it by hand is. Submit the zip, not its contents.
 
 ## Before each release
 

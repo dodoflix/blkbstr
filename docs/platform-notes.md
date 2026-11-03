@@ -93,13 +93,19 @@ uninstall removes the service and deletes that directory. The engine in Program 
 way: it was installed by the wizard, not by the installer. If the helper still answers with a
 different version than the app after an update, the Dashboard offers to install it again.
 
-**Antivirus.** Windows Security flags the WinDivert driver that ships with the engine and removes it
-as it is written. It also refuses any read of the zip that holds it (`os error 225`), and an
-exclusion added after the zip landed on disk does not lift that. So the elevated `install-engine`
-step downloads the zip into memory itself (`curl.exe`), excludes `C:\Program Files\zapret2` from
-Defender's scans (`Add-MpPreference`), checks the hash and unpacks. Uninstalling Blockbuster removes
-that exclusion when the engine there is one the wizard installed. With another antivirus, or
-Tamper Protection on, the exclusion cannot be set and the install says the file was blocked.
+**Antivirus.** Windows Security flags upstream's zapret2 zip as `Trojan:Win32/Suschil!rfn` as soon
+as it is written, any read of a copy on disk fails (`os error 225`), and an exclusion added
+after the zip landed does not lift that. The files inside it pass, written and scanned on their
+own and while the engine runs (checked on Windows 11 with definitions 1.463.107.0). So the elevated
+`install-engine` step downloads the zip into memory itself (`curl.exe`), never writing it, excludes
+`C:\Program Files\zapret2` from Defender's scans (`Add-MpPreference`) in case a later verdict
+catches the engine files, checks the hash and unpacks. Uninstalling Blockbuster removes that
+exclusion when the engine there is one the wizard installed. With another antivirus, or Tamper
+Protection on, the exclusion cannot be set and the install reports a file it blocked.
+
+**C runtime.** `blkbstrd.exe` links the C runtime statically (`stage-daemon.ps1`). A clean Windows
+has no VC++ redistributable, and a daemon that imports `VCRUNTIME140.dll` dies with `0xC0000135`
+before the engine install or the service starts.
 
 **Windows on ARM.** Not offered. Upstream's answer is the x64 build with a test-signed driver and
 Test Signing mode switched on, which is not something to do behind a button.
