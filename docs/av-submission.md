@@ -15,7 +15,7 @@ Known today: Defender flags `zapret2-v1.0.5.2.zip` (SHA-256
 while every file inside it passes on its own. The app never writes that zip to disk on Windows,
 so users are not affected; anyone who downloads it by hand is. Submit the zip, not its contents.
 
-## Before each release
+## After each release
 
 1. Releases are unsigned and will stay so (a certificate costs money the project does not have),
    so they are judged on bytes alone and flagged far more often. The real-Windows run and the
@@ -43,8 +43,11 @@ so users are not affected; anyone who downloads it by hand is. Submit the zip, n
    URL, that the source is public, and what the program does
    (it drives the open-source zapret2 engine, which uses the WinDivert driver to rewrite the user's
    own outgoing packets). Do not claim it does nothing suspicious; say exactly what it does.
-5. Do not publish the release until Defender has cleared it. Defender is what most users have, and
-   it is the one that removes the file silently.
+5. The release workflow attaches the installer to a release that is already published, so this
+   check runs right after it, not before. If Defender flags the installer, hide the release with
+   `gh release edit <tag> --draft` until Microsoft clears it: a draft is not the latest release,
+   so the download page and the app's updater (`releases/latest/download/latest.json`) fall back
+   to the previous one. Defender is what most users have, and it removes the file silently.
 
 Re-submit when a flag comes back. A new certificate or a new major version resets reputation.
 
