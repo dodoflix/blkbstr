@@ -3,6 +3,8 @@ name: Windows test build
 # Builds the Windows installer from any ref and keeps it as a workflow artifact, so a change to the
 # install flow can be tried on a real Windows machine without cutting a release. Not published.
 on:
+  push:
+    branches: [ci/windows-test-build]
   workflow_dispatch:
 
 permissions:
