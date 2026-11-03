@@ -1,0 +1,41 @@
+name: Defender probe
+
+# Throwaway: does Defender on a GitHub runner flag the same installer a Windows 11 PC flags?
+on:
+  push:
+    branches: [ci/windows-test-build]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Fetch the flagged and the clean installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 41652215885 -R $env:GITHUB_REPOSITORY -n blockbuster-windows-test -D flagged
+          gh run download 41649482772 -R $env:GITHUB_REPOSITORY -n blockbuster-windows-test -D clean
+          Get-ChildItem -Recurse flagged, clean | Select-Object FullName, Length
+      - name: Defender state
+        run: |
+          Get-MpComputerStatus | Format-List AMServiceEnabled, AntivirusEnabled, RealTimeProtectionEnabled, AntivirusSignatureVersion, AMProductVersion
+          Get-MpPreference | Format-List MAPSReporting, SubmitSamplesConsent, CloudBlockLevel, DisableRealtimeMonitoring
+          & "$env:ProgramFiles\Windows Defender\MpCmdRun.exe" -SignatureUpdate | Select-Object -Last 3
+      - name: Scan both
+        run: |
+          $mp = "$env:ProgramFiles\Windows Defender\MpCmdRun.exe"
+          foreach ($d in 'flagged', 'clean') {
+            $f = (Get-ChildItem $d -Filter *-setup.exe).FullName
+            $out = & $mp -Scan -ScanType 3 -File $f -DisableRemediation
+            "$d exit=$LASTEXITCODE"
+            $out | Select-Object -Last 6
+          }
+          Get-MpThreatDetection | Format-List ThreatID, Resources
+          Get-MpThreat | Format-List ThreatName
