@@ -219,4 +219,20 @@ mod tests {
         assert!(json.contains(r#""result":"error""#), "{json}");
         assert!(json.contains(r#""code":"engine_failed""#), "{json}");
     }
+
+    #[test]
+    fn dns_ops_use_the_documented_wire_names() {
+        let op = |r: &Request| serde_json::to_string(r).unwrap();
+        assert_eq!(op(&Request::Dns), r#"{"op":"dns"}"#);
+        assert_eq!(op(&Request::DnsEncrypt), r#"{"op":"dns_encrypt"}"#);
+        assert_eq!(op(&Request::DnsRestore), r#"{"op":"dns_restore"}"#);
+        let status = Response::Dns(DnsStatus {
+            supported: true,
+            active: false,
+            reason: None,
+        });
+        let json = serde_json::to_string(&status).unwrap();
+        assert_eq!(json, r#"{"result":"dns","supported":true,"active":false}"#);
+        assert_eq!(serde_json::from_str::<Response>(&json).unwrap(), status);
+    }
 }
