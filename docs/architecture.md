@@ -78,9 +78,13 @@ a machine where nothing is installed yet.
   and any existing zapret2 tree. "Not found" is a normal answer, not an error.
 - **Reachability** (`reachability.rs`) probes a list of commonly blocked hosts and gives each a
   verdict: DNS answered wrongly, TCP blocked, TLS reset, TLS silent, or fine. Nothing is uploaded.
+  A site with several endpoints (Discord's gateway and CDN, say) is checked as a bundle and loads
+  only when all of them do.
 - **Auto-configuration** walks `candidates::ranked()`, cheapest first. The walk runs in the UI:
   each step is an ordinary ephemeral start, a reachability check and a stop. The daemon's
   confirm-or-revert deadline, not the GUI, is what restores the machine if the window dies mid-walk.
+  It stops after three strategies get everything through, and skips hosts whose DNS answer is fake
+  (no strategy can fix those).
 - **Import** (`legacy.rs`) turns an existing zapret2 `config` into a `Config`. See
   [config-format.md](config-format.md#importing-from-zapret2).
 

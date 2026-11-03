@@ -219,6 +219,11 @@ mod imp {
     /// `blkbstrd uninstall-service`: stops and removes the service. Leaves the data directory.
     pub fn uninstall() -> Result<()> {
         let _log = crate::init_logging();
+        // Uninstalling must not leave the machine on DNS settings it was switched to, even when
+        // the service is already gone.
+        if let Err(e) = crate::dns::restore() {
+            tracing::warn!(error = %e, "could not put DNS back");
+        }
         let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
         let Ok(service) = manager.open_service(
             NAME,

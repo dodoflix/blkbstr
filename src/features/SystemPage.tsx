@@ -16,6 +16,7 @@ import {
   Text,
   Row,
   useConfirm,
+  useAsync,
 } from "../ui";
 import { useState } from "react";
 import * as api from "../api";
@@ -97,6 +98,7 @@ export function SystemPage() {
   const { env, service, daemon, act, report, checking, check, refreshEnv } = useBackend();
   const { advanced, setAdvanced } = usePrefs();
   const confirm = useConfirm();
+  const { data: dns, reload: reloadDns } = useAsync(api.dnsStatus);
 
   return (
     <div>
@@ -179,6 +181,19 @@ export function SystemPage() {
             {report ? <SiteList report={report} /> : checking ? <SiteListPlaceholder /> : <Text color={3}>Not checked yet.</Text>}
           </Panel>
         </Section>
+
+        {dns?.active && (
+          <Section title="Encrypted DNS">
+            <Sheet>
+              <Row justify="space-between">
+                <Text>Encrypted DNS is on (Cloudflare)</Text>
+                <Button size="sm" variant="soft" tone="neutral" icon="undo" onClick={async () => { if (await act(api.dnsRestore, "Your DNS settings are back")) await reloadDns(); }}>
+                  Undo
+                </Button>
+              </Row>
+            </Sheet>
+          </Section>
+        )}
 
         <Updates />
 

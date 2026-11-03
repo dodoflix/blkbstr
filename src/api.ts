@@ -147,6 +147,8 @@ export type SiteResult = {
   verdict: Verdict;
   detail?: string;
   elapsed_ms: number;
+  /** Only for a site checked as a bundle: every endpoint probed, the site itself first. The site's own verdict is the worst of them. */
+  endpoints?: SiteResult[];
 };
 
 export type Report = {
@@ -243,6 +245,13 @@ export const hostsAdd = (list: HostList, hosts: string[]) => invoke<void>("hosts
 export const hostsRemove = (list: HostList, hosts: string[]) => invoke<void>("hosts_remove", { list, hosts });
 /** Re-checks the learned list now. Returns at once; progress shows in `hosts`. */
 export const hostsCheck = () => invoke<void>("hosts_check");
+
+export type DnsStatus = { supported: boolean; active: boolean; reason?: string };
+/** `active` means Blockbuster switched the system to encrypted DNS (Cloudflare) and can undo it. */
+export const dnsStatus = () => invoke<DnsStatus>("dns_status");
+export const dnsEncrypt = () => invoke<void>("dns_encrypt");
+/** Puts back the DNS settings from before `dnsEncrypt`; does nothing if none were changed. */
+export const dnsRestore = () => invoke<void>("dns_restore");
 
 /** Local and pure; safe to call on every keystroke. */
 export const lintConfig = (config: Config) =>

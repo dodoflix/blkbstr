@@ -43,6 +43,9 @@ failing in an interesting way three requests later.
 | `hosts_add` | `list`, `hosts` | Add hosts; anything that is not a plain hostname is ignored |
 | `hosts_remove` | `list`, `hosts` | Remove hosts. The engine learns an `auto` host again if it still fails |
 | `hosts_check` | - | Start a re-check of the `auto` list now; returns at once |
+| `dns` | - | Whether encrypted DNS is available here (`supported`, with a `reason` when not) and whether blkbstr has switched it on (`active`) |
+| `dns_encrypt` | - | Windows 11: switch the active adapters to Cloudflare over HTTPS, keeping a backup. Already active is a no-op |
+| `dns_restore` | - | Put DNS back from that backup. Nothing switched is a no-op |
 
 `ephemeral: true` runs the config without recording it as active, so a failed experiment is undone
 by a restart. It also arms a deadline: unless a `confirm` arrives within two minutes, the daemon
@@ -58,7 +61,7 @@ with the reason in `last_error`, so the GUI can explain the situation instead of
 request.
 
 ```json
-{"op":"ping","protocol":3}
+{"op":"ping","protocol":4}
 {"op":"start","config":{"schema":1,"name":"home-isp","strategies":[]},"ephemeral":true}
 ```
 
@@ -69,6 +72,8 @@ request.
 {"result":"status","running":true,"active_config":"home-isp","ephemeral":true,"revert_in_seconds":97,"pid":4211}
 {"result":"status","running":false,"ephemeral":false,"last_error":"engine exited: signal: 9"}
 {"result":"hosts","list":"auto","enabled":true,"hosts":["discord.com"],"checking":false,"last_dropped":[]}
+{"result":"dns","supported":true,"active":false}
+{"result":"dns","supported":false,"active":false,"reason":"Encrypted DNS needs Windows 11"}
 {"result":"ok"}
 {"result":"error","code":"engine_failed","message":"nfqws2 exited with status 1"}
 ```

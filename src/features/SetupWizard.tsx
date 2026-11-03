@@ -23,12 +23,13 @@ import {
   type State,
   useMediaQuery,
   type Step,
+  useAsync,
   useToast,
 } from "../ui";
 import * as api from "../api";
 import { ReloginNotice, useHelperInstall } from "./HelperInstall";
 import { useBackend } from "./backend";
-import { impactLabel, plainImpact, useAutoConfig, type AutoConfig } from "./autoconfig";
+import { DNS_ADVICE, fixable, impactLabel, plainImpact, useAutoConfig, type AutoConfig } from "./autoconfig";
 import { plural } from "./format";
 import { usePrefs } from "./prefs";
 import { HostModePicker } from "./hostmode";
@@ -224,12 +225,16 @@ function ComputerStep({ onNext }: { onNext: () => void }) {
 }
 
 function SitesStep({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
-  const { report, checking, check } = useBackend();
+  const { report, checking, check, act } = useBackend();
+  const { advanced } = usePrefs();
+  const { data: dns, reload: dnsReload } = useAsync(api.dnsStatus);
+  const [switching, setSwitching] = useState(false);
   useEffect(() => {
     void check();
   }, [check]);
 
-  const blocked = report?.sites.filter((s) => s.verdict !== "fine").length ?? 0;
+  const blocked = report?.sites.filter((s) => fixable(s.verdict)).length ?? 0;
+  const poisoned = report?.sites.filter((s) => s.verdict === "dns_poisoned").map((s) => s.host) ?? [];
   return (
     <Stack gap={5}>
       {checking || !report ? (
@@ -241,14 +246,45 @@ function SitesStep({ onNext, onBack }: { onNext: () => void; onBack: () => void 
               Even {report.control.host} did not answer. Fix the connection first, then test again.
             </Notice>
           )}
-          {report.network_ok && blocked === 0 && (
+          {report.network_ok && report.sites.every((s) => s.verdict === "fine") && (
             <Notice tone="ok" title="Everything on the list loads already">
               There is nothing to work around right now. You can still continue and save a config for later.
             </Notice>
           )}
           {report.network_ok && blocked > 0 && (
-            <Notice tone="warn" title={`${blocked} of ${report.sites.length} sites are blocked`}>
+            <Notice tone="warn" title={`${blocked} of ${report.sites.length} sites are blocked in a way a strategy can fix`}>
               That is what the next step will try to fix.
+            </Notice>
+          )}
+          {report.network_ok && poisoned.length > 0 && (
+            <Notice
+              tone="warn"
+              title="Fake DNS answers"
+              action={
+                dns?.supported && !dns.active ? (
+                  <Button
+                    size="sm"
+                    variant="soft"
+                    tone="neutral"
+                    loading={switching}
+                    onClick={async () => {
+                      setSwitching(true);
+                      await act(api.dnsEncrypt);
+                      await Promise.all([dnsReload(), check()]);
+                      setSwitching(false);
+                    }}
+                  >
+                    Switch to encrypted DNS
+                  </Button>
+                ) : undefined
+              }
+            >
+              {poisoned.join(", ")} got a made-up address from DNS, which no strategy can fix.{" "}
+              {dns?.active
+                ? "Encrypted DNS is on, but they still got a fake answer. Try again in a minute: DNS keeps old answers for a while."
+                : dns?.supported
+                  ? "Encrypted DNS asks Cloudflare directly, so the fake answers do not reach you."
+                  : `${DNS_ADVICE}${advanced && dns?.reason ? ` ${dns.reason}.` : ""}`}
             </Notice>
           )}
           <SiteList report={report} />

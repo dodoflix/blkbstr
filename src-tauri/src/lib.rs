@@ -15,7 +15,7 @@ mod updater;
 use blkbstr_core::candidates;
 use blkbstr_core::detect;
 use blkbstr_core::protocol::{
-    EngineStatus, HostList, HostsStatus, Request, Response, PROTOCOL_VERSION,
+    DnsStatus, EngineStatus, HostList, HostsStatus, Request, Response, PROTOCOL_VERSION,
 };
 use blkbstr_core::reachability;
 use blkbstr_core::registry::{self, Warning};
@@ -119,6 +119,26 @@ fn hosts_remove(list: HostList, hosts: Vec<String>) -> Result<(), daemon::Error>
 #[tauri::command]
 fn hosts_check() -> Result<(), daemon::Error> {
     daemon::request(Request::HostsCheck).map(|_| ())
+}
+
+#[tauri::command]
+fn dns_status() -> Result<DnsStatus, daemon::Error> {
+    match daemon::request(Request::Dns)? {
+        Response::Dns(status) => Ok(status),
+        other => Err(daemon::Error::Io(format!(
+            "unexpected reply to dns: {other:?}"
+        ))),
+    }
+}
+
+#[tauri::command]
+fn dns_encrypt() -> Result<(), daemon::Error> {
+    daemon::request(Request::DnsEncrypt).map(|_| ())
+}
+
+#[tauri::command]
+fn dns_restore() -> Result<(), daemon::Error> {
+    daemon::request(Request::DnsRestore).map(|_| ())
 }
 
 /// Engine, Lua runtime, nftables, distro, and any zapret2 install already present. Local, so
@@ -348,6 +368,9 @@ pub fn run() {
             hosts_add,
             hosts_remove,
             hosts_check,
+            dns_status,
+            dns_encrypt,
+            dns_restore,
             lint_config,
             known_functions,
             starter_config,

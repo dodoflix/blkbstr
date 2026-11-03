@@ -4,8 +4,9 @@
 //! retried or reused a session could turn a blocked site into a working one.
 
 use serde::Serialize;
+use std::collections::HashMap;
 use std::io::{ErrorKind, Read, Write};
-use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::{Duration, Instant};
 
 /// A group of sites that are blocked together, since a censor tends to treat a category alike and
@@ -111,6 +112,44 @@ pub const CATEGORIES: &[Category] = &[
     },
 ];
 
+/// Other endpoints a site's app needs over TLS 443, which a censor can block while the site itself
+/// loads. A bundled site counts as loading only when every one of them does.
+pub const BUNDLES: &[(&str, &[&str])] = &[
+    (
+        "discord.com",
+        &[
+            "discord.gg",
+            "gateway.discord.gg",
+            "cdn.discordapp.com",
+            "media.discordapp.net",
+            "updates.discord.com",
+        ],
+    ),
+    (
+        "youtube.com",
+        &[
+            "www.youtube.com",
+            "i.ytimg.com",
+            "yt3.ggpht.com",
+            "redirector.googlevideo.com",
+        ],
+    ),
+    ("x.com", &["abs.twimg.com", "pbs.twimg.com", "api.x.com"]),
+    (
+        "www.instagram.com",
+        &["i.instagram.com", "static.cdninstagram.com"],
+    ),
+    ("telegram.org", &["web.telegram.org"]),
+    ("twitch.tv", &["static.twitchcdn.net", "usher.ttvnw.net"]),
+];
+
+fn endpoints_of(host: &str) -> &'static [&'static str] {
+    BUNDLES
+        .iter()
+        .find(|(site, _)| *site == host)
+        .map_or(&[], |(_, endpoints)| endpoints)
+}
+
 /// Every site in every category.
 pub fn default_hosts() -> Vec<String> {
     CATEGORIES
@@ -140,7 +179,7 @@ pub enum Verdict {
     Fine,
     /// The name did not resolve at all.
     DnsFailed,
-    /// It resolved, but to an address nothing can be hosted on.
+    /// It resolved, but to an address nothing can be hosted on or a known censor block page.
     DnsPoisoned,
     /// The address resolved and the connection could not be opened.
     TcpBlocked,
@@ -156,6 +195,14 @@ impl Verdict {
     pub const fn blocked(self) -> bool {
         !matches!(self, Verdict::Fine)
     }
+
+    /// Blocks a packet strategy can change; a fake DNS answer or a dead name is beyond it.
+    pub const fn fixable(self) -> bool {
+        matches!(
+            self,
+            Verdict::TcpBlocked | Verdict::TlsReset | Verdict::TlsSilent
+        )
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -166,6 +213,9 @@ pub struct SiteResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     pub elapsed_ms: u64,
+    /// For a bundled site, every endpoint probed, the site itself first; empty for any other.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub endpoints: Vec<SiteResult>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -198,23 +248,61 @@ pub fn check(hosts: &[String], timeout: Duration) -> Report {
 
 pub fn check_with(hosts: &[String], timeout: Duration, connect: &Connector) -> Report {
     std::thread::scope(|scope| {
-        let control = scope.spawn(move || check_host_with(CONTROL_HOST, timeout, connect));
-        let running: Vec<_> = hosts
-            .iter()
-            .map(|host| scope.spawn(move || check_host_with(host, timeout, connect)))
+        // One probe per distinct name, since bundles overlap with the list and with each other.
+        let mut running = HashMap::new();
+        let names = std::iter::once(CONTROL_HOST)
+            .chain(hosts.iter().map(String::as_str))
+            .chain(hosts.iter().flat_map(|h| endpoints_of(h)).copied());
+        for host in names {
+            running
+                .entry(host)
+                .or_insert_with(|| scope.spawn(move || check_host_with(host, timeout, connect)));
+        }
+        let done: HashMap<&str, SiteResult> = running
+            .into_iter()
+            .map(|(host, handle)| (host, handle.join().unwrap_or_else(|_| failed(host))))
             .collect();
 
-        let control = control.join().unwrap_or_else(|_| failed(CONTROL_HOST));
+        let control = done[CONTROL_HOST].clone();
         Report {
             network_ok: control.verdict == Verdict::Fine,
             control,
-            sites: running
-                .into_iter()
-                .zip(hosts)
-                .map(|(handle, host)| handle.join().unwrap_or_else(|_| failed(host)))
+            sites: hosts
+                .iter()
+                .map(|host| match endpoints_of(host) {
+                    [] => done[host.as_str()].clone(),
+                    others => fold_bundle(
+                        std::iter::once(host.as_str())
+                            .chain(others.iter().copied())
+                            .map(|h| done[h].clone())
+                            .collect(),
+                    ),
+                })
                 .collect(),
         }
     })
+}
+
+/// One verdict for a site probed at several endpoints, the first being the site itself. A wrong DNS
+/// answer outranks a block a strategy could fix, since no strategy would make the site load; among
+/// equals the first endpoint wins, and the detail names it when it is not the site itself.
+fn fold_bundle(endpoints: Vec<SiteResult>) -> SiteResult {
+    let decisive = endpoints
+        .iter()
+        .find(|e| e.verdict.blocked() && !e.verdict.fixable())
+        .or_else(|| endpoints.iter().find(|e| e.verdict.fixable()))
+        .unwrap_or(&endpoints[0]);
+    let detail = match (&decisive.detail, decisive.host == endpoints[0].host) {
+        (Some(why), false) => Some(format!("{}: {why}", decisive.host)),
+        (why, _) => why.clone(),
+    };
+    SiteResult {
+        host: endpoints[0].host.clone(),
+        verdict: decisive.verdict,
+        detail,
+        elapsed_ms: endpoints.iter().map(|e| e.elapsed_ms).max().unwrap_or(0),
+        endpoints,
+    }
 }
 
 fn failed(host: &str) -> SiteResult {
@@ -223,6 +311,7 @@ fn failed(host: &str) -> SiteResult {
         verdict: Verdict::BadHost,
         detail: Some("the check itself panicked".into()),
         elapsed_ms: 0,
+        endpoints: Vec::new(),
     }
 }
 
@@ -238,6 +327,7 @@ fn check_host_with(host: &str, timeout: Duration, connect: &Connector) -> SiteRe
         verdict,
         detail,
         elapsed_ms: started.elapsed().as_millis() as u64,
+        endpoints: Vec::new(),
     }
 }
 
@@ -314,7 +404,24 @@ pub fn check_hostname(host: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
+/// Block-page servers a Turkish resolver answers with for blocked names, per OONI's
+/// blocking-fingerprints (fingerprints_dns.csv).
+const BLOCK_PAGES: &[Ipv4Addr] = &[
+    Ipv4Addr::new(195, 175, 254, 2),
+    Ipv4Addr::new(193, 192, 98, 41),
+    Ipv4Addr::new(193, 192, 98, 42),
+    Ipv4Addr::new(193, 192, 98, 43),
+    Ipv4Addr::new(193, 192, 98, 45),
+    Ipv4Addr::new(193, 192, 98, 46),
+    Ipv4Addr::new(193, 192, 98, 47),
+    Ipv4Addr::new(193, 192, 98, 48),
+    Ipv4Addr::new(193, 192, 98, 49),
+];
+
 /// Nothing real is served from these, so a name resolving to one was answered by something else.
+/// Known block pages are public addresses that do answer TLS, so a handshake from them proves nothing.
+// shortcut: only fingerprints OONI has published are caught; upgrade to comparing against an
+// encrypted resolver if other countries' block pages show up as `fine`.
 fn is_sinkhole(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
@@ -323,6 +430,7 @@ fn is_sinkhole(ip: IpAddr) -> bool {
                 || v4.is_private()
                 || v4.is_link_local()
                 || v4.is_broadcast()
+                || BLOCK_PAGES.contains(&v4)
         }
         IpAddr::V6(v6) => v6.is_loopback() || v6.is_unspecified(),
     }
@@ -466,6 +574,7 @@ mod tests {
             assert!(is_sinkhole(ip.into()), "{ip}");
         }
         assert!(!is_sinkhole(Ipv4Addr::new(93, 184, 215, 14).into()));
+        assert!(is_sinkhole(Ipv4Addr::new(195, 175, 254, 2).into()));
         assert!(is_sinkhole(Ipv6Addr::LOCALHOST.into()));
         assert!(!is_sinkhole(
             "2606:2800:21f:cb07:6820:80da:af6b:8b2c".parse().unwrap()
@@ -592,6 +701,94 @@ mod tests {
         assert!(!hosts.iter().any(|h| h == CONTROL_HOST));
     }
 
+    fn endpoint(host: &str, verdict: Verdict) -> SiteResult {
+        SiteResult {
+            host: host.into(),
+            verdict,
+            detail: Some(format!("{host} detail")),
+            elapsed_ms: host.len() as u64,
+            endpoints: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_bundle_loads_only_when_every_endpoint_does() {
+        let all_fine = fold_bundle(vec![
+            endpoint("a.com", Verdict::Fine),
+            endpoint("b.com", Verdict::Fine),
+        ]);
+        assert_eq!(
+            (
+                all_fine.verdict,
+                all_fine.detail.as_deref(),
+                all_fine.elapsed_ms
+            ),
+            (Verdict::Fine, Some("a.com detail"), 5)
+        );
+
+        // The named host loads, a sibling is reset: the site is blocked and says which endpoint.
+        let one_reset = fold_bundle(vec![
+            endpoint("a.com", Verdict::Fine),
+            endpoint("b.com", Verdict::TlsSilent),
+            endpoint("cc.com", Verdict::TlsReset),
+        ]);
+        assert_eq!(one_reset.host, "a.com");
+        assert_eq!(one_reset.verdict, Verdict::TlsSilent);
+        assert_eq!(one_reset.detail.as_deref(), Some("b.com: b.com detail"));
+        assert_eq!(one_reset.elapsed_ms, 6);
+        assert_eq!(one_reset.endpoints.len(), 3);
+
+        // A wrong DNS answer outranks anything a strategy could fix, and the named host's own detail is not prefixed.
+        let dns = fold_bundle(vec![
+            endpoint("a.com", Verdict::DnsPoisoned),
+            endpoint("b.com", Verdict::TlsReset),
+        ]);
+        assert_eq!(
+            (dns.verdict, dns.detail.as_deref()),
+            (Verdict::DnsPoisoned, Some("a.com detail"))
+        );
+        let later_dns = fold_bundle(vec![
+            endpoint("a.com", Verdict::TlsReset),
+            endpoint("b.com", Verdict::DnsFailed),
+        ]);
+        assert_eq!(
+            (later_dns.verdict, later_dns.detail.as_deref()),
+            (Verdict::DnsFailed, Some("b.com: b.com detail"))
+        );
+    }
+
+    #[test]
+    fn every_bundle_belongs_to_a_listed_site() {
+        let listed = default_hosts();
+        for (site, _) in BUNDLES {
+            assert!(
+                listed.iter().any(|h| h == site),
+                "{site} is not in CATEGORIES"
+            );
+        }
+    }
+
+    /// Real network, so not run by default: `cargo test -p blkbstr-core -- --ignored --nocapture`.
+    /// Prints each endpoint's verdict; from an uncensored network all should be `Fine`, and a name
+    /// that does not resolve anywhere is a typo.
+    #[test]
+    #[ignore]
+    fn every_bundle_endpoint_exists() {
+        for (site, endpoints) in BUNDLES {
+            for host in *endpoints {
+                let result = check_host(host, DEFAULT_TIMEOUT);
+                println!(
+                    "{site} -> {host}: {:?} ({})",
+                    result.verdict,
+                    result.detail.as_deref().unwrap_or("")
+                );
+                assert!(
+                    !matches!(result.verdict, Verdict::DnsFailed | Verdict::BadHost),
+                    "{host}"
+                );
+            }
+        }
+    }
     /// Real network, so not run by default: `cargo test -p blkbstr-core -- --ignored --nocapture`.
     #[test]
     #[ignore]

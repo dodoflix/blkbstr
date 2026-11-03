@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::io::{BufRead, Write};
 
 /// Every request carries this; the daemon refuses mismatched majors rather than guessing.
-pub const PROTOCOL_VERSION: u32 = 3;
+pub const PROTOCOL_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
@@ -42,6 +42,12 @@ pub enum Request {
     },
     /// Re-checks the learned list now instead of waiting for the next scheduled run.
     HostsCheck,
+    /// Whether blkbstr can switch this machine to encrypted DNS and whether it has.
+    Dns,
+    /// Switches the machine's DNS to Cloudflare over HTTPS, keeping a backup of the old settings.
+    DnsEncrypt,
+    /// Puts DNS back as it was before [`Request::DnsEncrypt`]. Nothing to undo is not an error.
+    DnsRestore,
 }
 
 /// The two lists the daemon keeps for the engine.
@@ -63,6 +69,7 @@ pub enum Response {
     },
     Status(EngineStatus),
     Hosts(HostsStatus),
+    Dns(DnsStatus),
     Ok,
     Error {
         code: ErrorCode,
@@ -126,6 +133,19 @@ pub struct HostsStatus {
     /// Unix epoch seconds the next scheduled re-check runs; absent while the list is not in use.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_check: Option<u64>,
+}
+
+/// Encrypted DNS: Turkey answers Discord's lookups with a fake address, so the machine's DNS is
+/// moved to Cloudflare over HTTPS.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DnsStatus {
+    /// Whether this machine can do it at all.
+    pub supported: bool,
+    /// blkbstr switched DNS and holds a backup it can restore.
+    pub active: bool,
+    /// Plain-language why not, when `supported` is false.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 /// Writes one framed message. Both sides must flush before waiting for a reply or they deadlock.
@@ -198,5 +218,21 @@ mod tests {
         .unwrap();
         assert!(json.contains(r#""result":"error""#), "{json}");
         assert!(json.contains(r#""code":"engine_failed""#), "{json}");
+    }
+
+    #[test]
+    fn dns_ops_use_the_documented_wire_names() {
+        let op = |r: &Request| serde_json::to_string(r).unwrap();
+        assert_eq!(op(&Request::Dns), r#"{"op":"dns"}"#);
+        assert_eq!(op(&Request::DnsEncrypt), r#"{"op":"dns_encrypt"}"#);
+        assert_eq!(op(&Request::DnsRestore), r#"{"op":"dns_restore"}"#);
+        let status = Response::Dns(DnsStatus {
+            supported: true,
+            active: false,
+            reason: None,
+        });
+        let json = serde_json::to_string(&status).unwrap();
+        assert_eq!(json, r#"{"result":"dns","supported":true,"active":false}"#);
+        assert_eq!(serde_json::from_str::<Response>(&json).unwrap(), status);
     }
 }
