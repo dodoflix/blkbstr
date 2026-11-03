@@ -79,8 +79,8 @@ pub fn unpack(bytes: &[u8], sha256: &str, root: &str, binary_dir: &str, dest: &P
 }
 
 const BLOCKED: &str = "Windows Security or another antivirus most likely blocked or removed it: \
-    the engine ships a WinDivert driver, which antivirus programs often flag. Allow it under \
-    Protection history, or exclude the install folder, then install again.";
+    antivirus programs often flag the engine, which rewrites network traffic through a driver. \
+    Allow it under Protection history, or exclude the install folder, then install again.";
 
 /// `ERROR_VIRUS_INFECTED` and `ERROR_VIRUS_DELETED`, which is how Defender refuses a write.
 fn blocked_by_antivirus(e: &std::io::Error) -> bool {

@@ -1,5 +1,6 @@
-//! Windows Security flags the WinDivert driver that ships with the engine and removes it as it is
-//! written, so the install folder is excluded from scanning before anything lands in it. Only that
+//! Windows Security flags upstream's zapret2 zip as `Trojan:Win32/Suschil!rfn`; the files inside it
+//! pass on their own today, but antivirus verdicts on the engine change without notice, so the
+//! install folder is excluded from scanning before anything lands in it. Only that
 //! one folder, only for an install the user asked for and was told about. Best effort: with another
 //! antivirus, or Tamper Protection on, the cmdlet fails and the install reports the block instead
 //! (see `zip_install`).

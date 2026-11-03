@@ -5,16 +5,29 @@ heuristic engine that is malware, so some vendors will flag the installer, `blkb
 engine's files. Two different things get flagged and they are fixed differently:
 
 - **Our files** (the installer, `Blockbuster.exe`, `blkbstrd.exe`): ours to submit as the author.
-- **Upstream's files** (`winws2.exe`, `cygwin1.dll`, `WinDivert.dll`, `WinDivert64.sys`): not ours
-  to submit as the author, but the same vendor forms accept anyone's file, and a flag on these
-  breaks the engine, not the app. Report them too, naming the upstream project.
+- **Upstream's files** (the zapret2 zip, `winws2.exe`, `cygwin1.dll`, `WinDivert.dll`,
+  `WinDivert64.sys`): not ours to submit as the author, but the same vendor forms accept anyone's
+  file, and a flag on these breaks the engine, not the app. Report them too, naming the upstream
+  project.
+
+Known today: Defender flags `zapret2-v1.0.5.2.zip` (SHA-256
+`f585590bea6da82ac2c74926f6ac17e6204ee8b53e455c2ba2edae0c58c5d4ac`) as `Trojan:Win32/Suschil!rfn`,
+while every file inside it passes on its own. The app never writes that zip to disk on Windows,
+so users are not affected; anyone who downloads it by hand is. Submit the zip, not its contents.
 
 ## Before each release
 
-1. Releases are unsigned, which is judged on bytes alone and flagged far more often, so expect
-   more reports from users. Signing the installer is planned.
+1. Releases are unsigned and will stay so (a certificate costs money the project does not have),
+   so they are judged on bytes alone and flagged far more often. The real-Windows run and the
+   Microsoft submission below are what keep users from being blocked.
 2. Upload the installer to [VirusTotal](https://www.virustotal.com) and note which engines flag it.
-   That list is the work list below.
+   That list is the work list below. Also run it once on a real Windows 11 with Defender on
+   defaults (cloud protection and real-time on): download it from the release page, run it, and
+   install the engine from the wizard. Defender's machine-learning verdicts (names ending in
+   `!ml`, e.g. `Trojan:Win32/Bearfoos.A!ml`) land on some unsigned builds and not others built
+   from the same source, and Defender on a GitHub runner does not see them: real-time protection
+   is off there. One such verdict on a test build cleared itself within an hour once Defender had
+   sent the file to Microsoft; submitting it gets the same result faster.
 3. Submit it to each vendor that flagged it, and to the ones people actually run:
 
    | Vendor | Where |
