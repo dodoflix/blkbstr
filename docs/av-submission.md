@@ -20,7 +20,13 @@ so users are not affected; anyone who downloads it by hand is. Submit the zip, n
 1. Releases are unsigned, which is judged on bytes alone and flagged far more often, so expect
    more reports from users. Signing the installer is planned.
 2. Upload the installer to [VirusTotal](https://www.virustotal.com) and note which engines flag it.
-   That list is the work list below.
+   That list is the work list below. Also run it once on a real Windows 11 with Defender on
+   defaults (cloud protection and real-time on): download it from the release page, run it, and
+   install the engine from the wizard. Defender's machine-learning verdicts (names ending in
+   `!ml`, e.g. `Trojan:Win32/Bearfoos.A!ml`) land on some unsigned builds and not others built
+   from the same source, and Defender on a GitHub runner does not see them: real-time protection
+   is off there. One such verdict on a test build cleared itself within an hour once Defender had
+   sent the file to Microsoft; submitting it gets the same result faster.
 3. Submit it to each vendor that flagged it, and to the ones people actually run:
 
    | Vendor | Where |
