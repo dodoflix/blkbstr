@@ -13,6 +13,23 @@ const SETTLE_MS = 600;
  *  sites being measured until they had failed enough times to be learned. */
 const trial = (config: api.Config): api.Config => withMode(config, "all");
 
+/** Verdicts a packet strategy can change; a fake DNS answer or a dead name is beyond it. */
+export const fixable = (verdict: api.Verdict) => ["tls_reset", "tls_silent", "tcp_blocked"].includes(verdict);
+
+export const DNS_ADVICE =
+  "Turn on encrypted DNS (Windows: Settings > Network & internet > DNS server assignment > DNS over HTTPS, or use a DoH resolver such as 1.1.1.1), then try again.";
+
+/** Candidates are ordered likely-first and gentlest within each family, as blockcheck2 prunes, so
+ *  once a few get everything through the rest are only costlier ones. */
+const ENOUGH = 3;
+
+/** Each measured one costs a start and three checks. */
+const MEASURE_AT_MOST = 5;
+
+/** Domains a bundle needs that no fixed host can probe: Discord voice signals over TLS to
+ *  per-region <region>.discord.media hosts before any UDP flows. */
+const UNPROBED: Record<string, string[]> = { "discord.com": ["discord.media"] };
+
 /** A candidate that filters ports the check never uses cannot change the result. */
 function measurable(config: api.Config): boolean {
   return config.strategies.some(
@@ -152,16 +169,21 @@ export function useAutoConfig() {
         );
         return;
       }
-      const blocked = baseline.sites.filter((site) => site.verdict !== "fine").map((site) => site.host);
+      const blocked = baseline.sites.filter((site) => fixable(site.verdict)).map((site) => site.host);
+      // No strategy changes a DNS answer, so these are named instead of walked.
+      const unfixable = baseline.sites.filter((site) => site.verdict !== "fine" && !fixable(site.verdict)).map((site) => site.host);
+      const dnsNote = unfixable.length > 0 ? ` ${unfixable.join(", ")} cannot be fixed by any strategy: the DNS answer is wrong. ${DNS_ADVICE}` : "";
       // What "did this make anything worse" is measured against; includes the control host.
       const unaffected = baseline.sites.filter((site) => site.verdict === "fine").map((site) => site.host);
       unaffected.push(baseline.control.host);
       setBlockedCount(blocked.length);
-      seed.current = baseline.sites
-        .filter((site) => ["tls_reset", "tls_silent", "tcp_blocked"].includes(site.verdict))
-        .map((site) => site.host);
+      // A blocked bundle goes on the lists whole, as domains: the engine's lists match subdomains, so
+      // endpoints the check never probed (other CDN nodes, the app's own hosts) are covered too.
+      // Bundles are curated, so the last two labels are the registrable domain.
+      seed.current = [...new Set(baseline.sites.filter((site) => fixable(site.verdict)).flatMap((site) => [...(site.endpoints?.map((e) => e.host.split(".").slice(-2).join(".")) ?? [site.host]), ...(UNPROBED[site.host] ?? [])]))];
       if (blocked.length === 0) {
-        setNote("Every site on the list already loads. There is nothing to work around.");
+        if (unfixable.length > 0) setError(`Nothing here is blocked in a way a strategy can fix.${dnsNote}`);
+        else setNote("Every site on the list already loads. There is nothing to work around.");
         return;
       }
 
@@ -170,6 +192,7 @@ export function useAutoConfig() {
       const usable = all.filter(({ config }) => measurable(config));
       const skipped = all.length - usable.length;
       setProgress([0, usable.length]);
+      let early = false;
       for (const [i, { config, cost }] of usable.entries()) {
         if (cancelled.current) break;
         setProgress([i + 1, usable.length]);
@@ -200,14 +223,18 @@ export function useAutoConfig() {
           worked,
           unblocked,
         );
+        if (tried.filter((s) => s.worked).length >= ENOUGH) {
+          early = true;
+          break;
+        }
       }
 
       const unmeasured =
         skipped > 0
           ? ` ${skipped} that only touch other ports were skipped: the check speaks TLS on ${api.PROBED_TCP_PORT} and nothing else, so it could not tell whether they helped.`
           : "";
-      // Only what helped is measured (three more checks per candidate).
-      const shortlist = rank(tried);
+      // Only the best few are measured (three more checks per candidate).
+      const shortlist = rank(tried).slice(0, MEASURE_AT_MOST);
       if (shortlist.length > 0 && !cancelled.current) {
         setMeasuring(true);
         const before = await measure(unaffected);
@@ -239,17 +266,20 @@ export function useAutoConfig() {
       const helped = rank(tried);
       if (helped.length === 0) {
         setError(
-          `No strategy got anything through. The engine is stopped and the machine is back as it was.${stopped}${unmeasured}`,
+          `No strategy got anything through. The engine is stopped and the machine is back as it was.${stopped}${unmeasured}${dnsNote}`,
         );
         return;
       }
       setWinner(helped[0].config);
       setSaveAs(helped[0].config.name);
       const best = helped[0].unblocked;
+      const worked = helped.filter((s) => s.worked).length;
       setNote(
         best === blocked.length
-          ? `${helped.filter((s) => s.worked).length} of ${tried.length} strategies got everything through. The gentlest is picked for you; any of them can be used instead.${stopped}`
-          : `Nothing got all ${blocked.length} through. The best got ${best}. Pick one or try again later: a censor is not the same from one hour to the next.${stopped}${unmeasured}`,
+          ? early
+            ? `Found ${worked} that get everything through after trying ${tried.length} of ${usable.length}; the gentlest is picked for you.${dnsNote}`
+            : `${worked} of ${tried.length} strategies got everything through. The gentlest is picked for you; any of them can be used instead.${stopped}${dnsNote}`
+          : `Nothing got all ${blocked.length} through. The best got ${best}. Pick one or try again later: a censor is not the same from one hour to the next.${stopped}${unmeasured}${dnsNote}`,
       );
       setDone(true);
     } catch (e) {

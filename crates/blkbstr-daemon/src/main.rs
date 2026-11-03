@@ -3,6 +3,7 @@
 
 #[cfg(windows)]
 mod defender;
+mod dns;
 mod engine;
 mod firewall;
 mod hostlist;
@@ -361,6 +362,19 @@ fn retry_missing_engine(slot: &EngineSlot) {
 fn handle(request: Request, engine: &EngineSlot) -> Response {
     // These touch a file and the network, not the engine, so they must not queue behind its lock.
     match &request {
+        Request::Dns => return Response::Dns(dns::status()),
+        Request::DnsEncrypt => {
+            return match dns::encrypt() {
+                Ok(()) => Response::Ok,
+                Err(e) => engine_failed(e),
+            };
+        }
+        Request::DnsRestore => {
+            return match dns::restore() {
+                Ok(()) => Response::Ok,
+                Err(e) => engine_failed(e),
+            };
+        }
         Request::Hosts { list } => {
             return Response::Hosts(hostlist::status(*list, list_in_use(engine, *list)));
         }
@@ -448,7 +462,10 @@ fn handle(request: Request, engine: &EngineSlot) -> Response {
         Request::Hosts { .. }
         | Request::HostsAdd { .. }
         | Request::HostsRemove { .. }
-        | Request::HostsCheck => {
+        | Request::HostsCheck
+        | Request::Dns
+        | Request::DnsEncrypt
+        | Request::DnsRestore => {
             unreachable!("answered before the engine lock")
         }
     }

@@ -4,13 +4,19 @@ import { VERDICTS } from "./format";
 import { usePrefs } from "./prefs";
 import { useSiteCategories } from "./sites";
 
+/** Which endpoints of a bundled site fail, since the site's own host may load while its app does not. */
+function blockedEndpoints(site: SiteResult) {
+  const bad = site.endpoints?.filter((e) => e.verdict !== "fine");
+  return bad?.length ? bad.map((e) => `${e.host}: ${VERDICTS[e.verdict].label}`).join(", ") : undefined;
+}
+
 function row(site: SiteResult, advanced: boolean) {
   const v = VERDICTS[site.verdict];
   return {
     id: site.host,
     leading: <StateMark state={v.state} size={18} label={v.label} />,
     title: site.host,
-    subtitle: advanced ? site.detail : undefined,
+    subtitle: advanced ? blockedEndpoints(site) ?? site.detail : undefined,
     trailing: (
       <>
         <span>{v.label}</span>

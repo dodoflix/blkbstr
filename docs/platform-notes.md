@@ -103,6 +103,22 @@ catches the engine files, checks the hash and unpacks. Uninstalling Blockbuster 
 exclusion when the engine there is one the wizard installed. With another antivirus, or Tamper
 Protection on, the exclusion cannot be set and the install reports a file it blocked.
 
+**Encrypted DNS.** Turkey answers lookups for Discord with a fake address, which the engine cannot
+fix. On Windows 11 (build 22000 and later, which has DNS over HTTPS built in) the wizard offers to
+switch the machine to Cloudflare. Windows 10 has no system DoH and plain DNS to 1.1.1.1 is
+intercepted as readily as the ISP's, so it is not offered there. For every adapter that is up and
+has a default gateway the daemon sets 1.1.1.1 and 1.0.0.1 (and Cloudflare's IPv6 pair when the
+adapter has an IPv6 address beyond link-local), makes sure `https://cloudflare-dns.com/dns-query` is
+registered for them with auto-upgrade on and plaintext fallback off, and writes the per-adapter
+`DohInterfaceSettings` registry values (`DohFlags` 0x11) that make Settings show the servers as
+`(Encrypted)`. With fallback off, a network that blocks Cloudflare has no DNS, so the daemon looks up
+`example.com` right after switching and puts everything back if that does not resolve.
+Before touching anything it writes the adapters' old settings to
+`C:\ProgramData\blkbstr\state\dns-backup.json`; that file existing is what "active" means. Restoring
+puts each adapter back (DHCP stays DHCP, static lists as they were), returns the DoH entries and
+registry values to what they were, and deletes the file; adapters that no longer exist are skipped.
+Uninstalling Blockbuster restores first.
+
 **C runtime.** `blkbstrd.exe` links the C runtime statically (`stage-daemon.ps1`). A clean Windows
 has no VC++ redistributable, and a daemon that imports `VCRUNTIME140.dll` dies with `0xC0000135`
 before the engine install or the service starts.

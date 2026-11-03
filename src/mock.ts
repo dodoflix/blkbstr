@@ -26,7 +26,7 @@ const CANDIDATES: { config: Config; cost: number }[] = [
 ];
 
 const BLOCKED: Record<string, Verdict> = {
-  "discord.com": "tls_reset",
+  "gateway.discord.gg": "tls_reset",
   "youtube.com": "tls_silent",
   "x.com": "dns_poisoned",
   "soundcloud.com": "tls_reset",
@@ -53,17 +53,28 @@ const lists: Record<"auto" | "manual", string[]> = {
 };
 let lastCheck: { at: number; dropped: string[] } | undefined;
 let checkingUntil = 0;
+let dnsOn = false;
 
 let engineInstalled = scenario !== "noengine";
 
 const fixesFor = (name?: string) => (name?.startsWith("fake") ? 1 : name?.startsWith("multisplit") ? 0.5 : 0);
 
-function site(host: string): SiteResult {
+function probe(host: string): SiteResult {
   const fix = fixesFor(running?.config.name);
-  const verdict = BLOCKED[host];
+  const verdict = host === "x.com" && dnsOn ? "tls_reset" : BLOCKED[host];
   const open = !verdict || fix === 1 || (fix === 0.5 && host.length % 2 === 0);
   const v: Verdict = open ? "fine" : verdict;
   return { host, verdict: v, detail: v === "fine" ? "TLS handshake completed" : v === "dns_poisoned" ? "answer points at a block page" : v === "tls_reset" ? "connection reset after the hello" : "no reply after the hello", elapsed_ms: open ? 90 + (host.length * 13) % 140 : 2000 };
+}
+
+/** The backend checks a bundled site at all its endpoints; the site is blocked if any is. */
+const BUNDLES: Record<string, string[]> = { "discord.com": ["gateway.discord.gg"] };
+
+function site(host: string): SiteResult {
+  const endpoints = [host, ...(BUNDLES[host] ?? [])].map(probe);
+  if (endpoints.length === 1) return endpoints[0];
+  const bad = endpoints.find((e) => e.verdict !== "fine") ?? endpoints[0];
+  return { ...bad, host, detail: bad.host === host ? bad.detail : `${bad.host}: ${bad.detail}`, endpoints };
 }
 
 async function reachability(hosts?: string[]): Promise<Report> {
@@ -184,6 +195,14 @@ export async function mock<T>(cmd: string, args: Record<string, unknown> = {}): 
       lists[list] = lists[list].filter((h) => !(args.hosts as string[]).includes(h));
       return out(undefined);
     }
+    case "dns_status":
+      return out({ supported: true, active: dnsOn });
+    case "dns_encrypt":
+      dnsOn = true;
+      return out(undefined);
+    case "dns_restore":
+      dnsOn = false;
+      return out(undefined);
     case "hosts_check": {
       checkingUntil = Date.now() + 3000;
       const dropped = lists.auto.slice(-1);
