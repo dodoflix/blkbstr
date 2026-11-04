@@ -255,15 +255,17 @@ jobs:
       # engine changing its mind, not as a different file.
       - name: Add the VirusTotal result to the release notes
         if: ${{ needs.virustotal.outputs.status == 'completed' }}
+        # Nice to have: a failure here must not stop the publish-or-hold decision below.
+        continue-on-error: true
         run: |
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > notes.md
           cat >> notes.md <<EOF
 
           ### VirusTotal
 
-          The Windows installer was scanned before release: [$DETECTIONS engines](https://www.virustotal.com/gui/file/$SHA256) flagged it, Microsoft Defender: \`$MICROSOFT\`. SHA-256: \`$SHA256\`.
+          Scanned before release. Microsoft Defender: \`$MICROSOFT\`. [$DETECTIONS engines on VirusTotal](https://www.virustotal.com/gui/file/$SHA256) flagged it${FLAGGED:+ ($FLAGGED)}. SHA-256: \`$SHA256\`.
 
-          Flagged by: ${FLAGGED:-none}. The installer is not code-signed, so some machine-learning engines flag it on sight; see [docs/av-submission.md](https://github.com/$GITHUB_REPOSITORY/blob/main/docs/av-submission.md#what-to-tell-a-user-whose-antivirus-blocked-it).
+          The installer is not code-signed, so a few machine-learning engines flag it on sight; these are known false positives, see [docs/av-submission.md](https://github.com/$GITHUB_REPOSITORY/blob/main/docs/av-submission.md#what-to-tell-a-user-whose-antivirus-blocked-it).
           EOF
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
       - name: Publish the release, or hold it for Microsoft
