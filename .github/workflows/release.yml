@@ -251,15 +251,21 @@ jobs:
     steps:
       - name: Publish the release, or hold it for Microsoft
         run: |
-          if [ "$STATUS" = skipped ] || { [ "$STATUS" = completed ] && [ "$MICROSOFT" != malicious ] && [ "$MICROSOFT" != suspicious ]; }; then
+          # Only an explicit clean verdict publishes: a missing, timed-out or unsupported Microsoft
+          # result means nothing was checked.
+          if [ "$STATUS" = skipped ] || { [ "$STATUS" = completed ] && { [ "$MICROSOFT" = undetected ] || [ "$MICROSOFT" = harmless ]; }; }; then
+            [ "$STATUS" = skipped ] && echo "::warning::VT_API_KEY is not set; publishing without the VirusTotal check."
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
             exit 0
           fi
-          if [ "$STATUS" = completed ]; then
-            why="Microsoft's engine on VirusTotal flags the installer as \`$MICROSOFT_RESULT\`."
-          else
-            why="The VirusTotal check did not finish (timed out or failed; see the workflow run)."
-          fi
+          case "$STATUS/$MICROSOFT" in
+            completed/malicious | completed/suspicious)
+              why="Microsoft's engine on VirusTotal flags the installer as \`$MICROSOFT_RESULT\`." ;;
+            completed/*)
+              why="Microsoft's engine on VirusTotal gave no verdict (\`$MICROSOFT\`)." ;;
+            *)
+              why="The VirusTotal check did not finish (timed out or failed; see the workflow run)." ;;
+          esac
           body=$(cat <<EOF
           $why The release stays a draft, so the download page and the app's updater keep the previous version.
 
@@ -271,7 +277,7 @@ jobs:
           2. Once Defender no longer flags it (docs/av-submission.md), publish: \`gh release edit $TAG --draft=false --latest\`
           EOF
           )
-          gh issue create --repo "$GITHUB_REPOSITORY" --title "$TAG is held: antivirus flagged the Windows installer" --body "$body"
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$TAG is held: the Windows installer did not pass the VirusTotal check" --body "$body"
 
   pages:
     needs: publish
