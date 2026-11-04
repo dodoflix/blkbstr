@@ -243,6 +243,8 @@ jobs:
     permissions:
       contents: write
       issues: write
+    outputs:
+      published: ${{ steps.decide.outputs.published }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TAG: ${{ needs.release-please.outputs.tag }}
@@ -271,12 +273,14 @@ jobs:
           EOF
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
       - name: Publish the release, or hold it for Microsoft
+        id: decide
         run: |
           # Only an explicit clean verdict publishes: a missing, timed-out or unsupported Microsoft
           # result means nothing was checked.
           if [ "$STATUS" = skipped ] || { [ "$STATUS" = completed ] && { [ "$MICROSOFT" = undetected ] || [ "$MICROSOFT" = harmless ]; }; }; then
             [ "$STATUS" = skipped ] && echo "::warning::VT_API_KEY is not set; publishing without the VirusTotal check."
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+            echo "published=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           case "$STATUS/$MICROSOFT" in
@@ -315,6 +319,9 @@ jobs:
 
   aur:
     needs: [release-please, linux, go-live]
+    # go-live succeeds on the hold path too; a held release is a draft, and the PKGBUILD's download
+    # URL would 404.
+    if: ${{ !cancelled() && needs.linux.result == 'success' && needs.go-live.outputs.published == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
