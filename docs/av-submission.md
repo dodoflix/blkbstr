@@ -20,10 +20,11 @@ so users are not affected; anyone who downloads it by hand is. Submit the zip, n
 1. Releases are unsigned and will stay so (a certificate costs money the project does not have),
    so they are judged on bytes alone and flagged far more often. The real-Windows run and the
    Microsoft submission below are what keep users from being blocked.
-2. Upload the installer to [VirusTotal](https://www.virustotal.com) and note which engines flag it.
-   That list is the work list below. Also run it once on a real Windows 11 with Defender on
-   defaults (cloud protection and real-time on): download it from the release page, run it, and
-   install the engine from the wizard. Defender's machine-learning verdicts (names ending in
+2. The release workflow uploads the installer to [VirusTotal](https://www.virustotal.com) and lists
+   every engine that flagged it in the run summary. That list is the work list below. Also run it
+   once on a real Windows 11 with Defender on defaults (cloud protection and real-time on):
+   download it from the release page, run it, and install the engine from the wizard. Defender's
+   machine-learning verdicts (names ending in
    `!ml`, e.g. `Trojan:Win32/Bearfoos.A!ml`) land on some unsigned builds and not others built
    from the same source, and Defender on a GitHub runner does not see them: real-time protection
    is off there. One such verdict on a test build cleared itself within an hour once Defender had
@@ -43,11 +44,13 @@ so users are not affected; anyone who downloads it by hand is. Submit the zip, n
    URL, that the source is public, and what the program does
    (it drives the open-source zapret2 engine, which uses the WinDivert driver to rewrite the user's
    own outgoing packets). Do not claim it does nothing suspicious; say exactly what it does.
-5. The release workflow attaches the installer to a release that is already published, so this
-   check runs right after it, not before. If Defender flags the installer, hide the release with
-   `gh release edit <tag> --draft` until Microsoft clears it: a draft is not the latest release,
-   so the download page and the app's updater (`releases/latest/download/latest.json`) fall back
-   to the previous one. Defender is what most users have, and it removes the file silently.
+5. The release stays a draft until the `go-live` job has the VirusTotal result. If Microsoft's
+   engine flags the installer, the release is held and an issue gives the hash and the detection;
+   submit it, and publish with `gh release edit <tag> --draft=false --latest` once Defender lets it
+   run. A flag can still arrive after go-live: if Defender then flags it, hide the release with
+   `gh release edit <tag> --draft` until Microsoft clears it. A draft is not the latest release, so
+   the download page and the app's updater (`releases/latest/download/latest.json`) fall back to the
+   previous one. Defender is what most users have, and it removes the file silently.
 
 Re-submit when a flag comes back. A new certificate or a new major version resets reputation.
 
