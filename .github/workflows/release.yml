@@ -204,9 +204,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: read
+      # A draft release is invisible to a read-only token ("release not found").
+      contents: write
     outputs:
-      status: ${{ steps.scan.outputs.status || 'skipped' }}
+      # No fallback: a step that dies before writing it leaves this empty, and go-live then holds.
+      status: ${{ steps.scan.outputs.status }}
       sha256: ${{ steps.scan.outputs.sha256 }}
       microsoft: ${{ steps.scan.outputs.microsoft }}
       microsoft_result: ${{ steps.scan.outputs.microsoft_result }}
