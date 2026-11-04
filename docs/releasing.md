@@ -7,12 +7,16 @@ Releases are made by [Release Please](https://github.com/googleapis/release-plea
    [Conventional Commit](https://www.conventionalcommits.org/), checked in CI.
 2. Release Please keeps one open pull request, "chore(main): release x.y.z", with the next version
    and the changelog it generated from those commits.
-3. Merging that pull request tags `vx.y.z` and publishes the GitHub release. The same workflow then
-   builds the Linux packages and `blkbstrd` and attaches them to that release, and in parallel
-   builds the Windows installer and attaches it. Once both are there, the `publish` job signs
-   `SHA256SUMS` over everything attached, attests each file, and publishes the apt and dnf
-   repositories to GitHub Pages; the `aur` job pushes `blkbstr-bin` to the AUR
-   ([install-linux.md](install-linux.md)).
+3. Merging that pull request tags `vx.y.z` and creates the GitHub release as a draft. The same
+   workflow then builds the Linux packages and `blkbstrd` and attaches them to that release, and in
+   parallel builds the Windows installer and attaches it. Once both are there, the `publish` job
+   signs `SHA256SUMS` over everything attached, attests each file, and publishes the apt and dnf
+   repositories to GitHub Pages. The `virustotal` job uploads the Windows installer to VirusTotal,
+   which shares it with the antivirus vendors, Microsoft included, before anyone can download it.
+   The `go-live` job then publishes the release, unless Microsoft's engine flagged the installer:
+   that release stays a draft and an issue lists what to submit
+   ([av-submission.md](av-submission.md)). After go-live, the `aur` job pushes `blkbstr-bin` to the
+   AUR ([install-linux.md](install-linux.md)).
 
 `feat` bumps the minor version, `fix` and `perf` the patch, and `feat!` or a `BREAKING CHANGE:`
 footer the major. While the version is below 1.0 a breaking change bumps the minor. `docs`,
@@ -53,6 +57,9 @@ One-time setup, and why a release fails without it:
   key and every user has to import a new one.
 - `AUR_SSH_PRIVATE_KEY` secret: an SSH key whose public half is on the maintainer's AUR account.
   The first push creates the package. Without it the AUR step is skipped.
+- `VT_API_KEY` secret: the API key of a free VirusTotal account (profile menu, "API key"). The free
+  key allows four requests a minute, enough for one upload and its polling. Without it the
+  VirusTotal check is skipped and releases go public as soon as they are built.
 
 The repositories hold only the latest release: each run rebuilds them from that release's `.deb`
 and `.rpm`.
