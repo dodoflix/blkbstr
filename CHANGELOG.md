@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/dodoflix/blkbstr/compare/v0.4.2...v0.4.3) (2026-11-04)
+
+
+### CI
+
+* add the VirusTotal result to the release notes ([#79](https://github.com/dodoflix/blkbstr/issues/79)) ([2d57695](https://github.com/dodoflix/blkbstr/commit/2d57695c9d77da5321c86942233dc2d77e59bc74))
+
 ## [0.4.2](https://github.com/dodoflix/blkbstr/compare/v0.4.1...v0.4.2) (2026-11-03)
 
 
