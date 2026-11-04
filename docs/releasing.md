@@ -13,7 +13,8 @@ Releases are made by [Release Please](https://github.com/googleapis/release-plea
    signs `SHA256SUMS` over everything attached, attests each file, and publishes the apt and dnf
    repositories to GitHub Pages. The `virustotal` job uploads the Windows installer to VirusTotal,
    which shares it with the antivirus vendors, Microsoft included, before anyone can download it.
-   The `go-live` job then publishes the release, unless Microsoft's engine flagged the installer:
+   The `go-live` job adds the result to the release notes (engines that flagged it, Microsoft's
+   verdict, the report link) and then publishes the release, unless Microsoft's engine flagged the installer:
    that release stays a draft and an issue lists what to submit
    ([av-submission.md](av-submission.md)). After go-live, the `aur` job pushes `blkbstr-bin` to the
    AUR ([install-linux.md](install-linux.md)).
