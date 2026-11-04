@@ -1,7 +1,8 @@
 #!/bin/sh
 # Uploads a file to VirusTotal, waits for the analysis and prints key=value lines for $GITHUB_OUTPUT:
 # sha256, status (completed or timeout), microsoft (the Microsoft engine's category), microsoft_result
-# (its detection name) and flagged (every engine that called it malicious or suspicious).
+# (its detection name), flagged (every engine that called it malicious or suspicious) and detections
+# ("<flagged> of <engines that gave a verdict>").
 # Needs VT_API_KEY. Usage: virustotal.sh <file>
 set -eu
 
@@ -33,4 +34,6 @@ printf '%s' "$report" | jq -r '.data.attributes.results as $r
   | "microsoft=\($r.Microsoft.category // "missing")",
     "microsoft_result=\($r.Microsoft.result // "")",
     "flagged=\([$r[] | select(.category == "malicious" or .category == "suspicious")
-      | "\(.engine_name): \(.result)"] | join("; "))"'
+      | "\(.engine_name): \(.result)"] | join("; "))",
+    "detections=\([$r[] | select(.category == "malicious" or .category == "suspicious")] | length) of \([$r[]
+      | select(.category == "malicious" or .category == "suspicious" or .category == "undetected" or .category == "harmless")] | length)"'

@@ -211,6 +211,7 @@ jobs:
       microsoft: ${{ steps.scan.outputs.microsoft }}
       microsoft_result: ${{ steps.scan.outputs.microsoft_result }}
       flagged: ${{ steps.scan.outputs.flagged }}
+      detections: ${{ steps.scan.outputs.detections }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -248,7 +249,25 @@ jobs:
       MICROSOFT: ${{ needs.virustotal.outputs.microsoft }}
       MICROSOFT_RESULT: ${{ needs.virustotal.outputs.microsoft_result }}
       FLAGGED: ${{ needs.virustotal.outputs.flagged }}
+      DETECTIONS: ${{ needs.virustotal.outputs.detections }}
     steps:
+      # Users can see what antivirus engines made of the installer, and a later flag reads as one
+      # engine changing its mind, not as a different file.
+      - name: Add the VirusTotal result to the release notes
+        if: ${{ needs.virustotal.outputs.status == 'completed' }}
+        # Nice to have: a failure here must not stop the publish-or-hold decision below.
+        continue-on-error: true
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > notes.md
+          cat >> notes.md <<EOF
+
+          ### VirusTotal
+
+          Scanned before release. Microsoft Defender: \`$MICROSOFT\`. [$DETECTIONS engines on VirusTotal](https://www.virustotal.com/gui/file/$SHA256) flagged it${FLAGGED:+ ($FLAGGED)}. SHA-256: \`$SHA256\`.
+
+          The installer is not code-signed, so a few machine-learning engines flag it on sight; these are known false positives, see [docs/av-submission.md](https://github.com/$GITHUB_REPOSITORY/blob/main/docs/av-submission.md#what-to-tell-a-user-whose-antivirus-blocked-it).
+          EOF
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
       - name: Publish the release, or hold it for Microsoft
         run: |
           # Only an explicit clean verdict publishes: a missing, timed-out or unsupported Microsoft
